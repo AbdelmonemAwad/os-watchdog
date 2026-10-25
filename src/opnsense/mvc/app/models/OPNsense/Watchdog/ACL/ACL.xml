@@ -1,0 +1,14 @@
+<!--
+    SPDX-License-Identifier: BSD-2-Clause
+    Copyright (c) 2026 Abdelmonem Awad <eg2@live.com>
+-->
+<acl>
+    <page-system-watchdog>
+        <name>System: Hardware Watchdog</name>
+        <description>Allow access to the hardware watchdog: its settings, arming and disarming it, and the last reset</description>
+        <patterns>
+            <pattern>ui/watchdog/*</pattern>
+            <pattern>api/watchdog/*</pattern>
+        </patterns>
+    </page-system-watchdog>
+</acl>

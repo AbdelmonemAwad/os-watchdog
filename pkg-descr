@@ -1,0 +1,15 @@
+Hardware Watchdog arms the watchdog timer in the host's chipset with
+watchdogd, so a host that stops working is reset by its own hardware
+instead of waiting for somebody to pull the power. It is disarmed at
+every shutdown. On AMD processors of family 17h or later it also reads,
+at every boot, why the host last reset, as the chipset recorded it.
+
+Where os-xgs-npu already arms the timer, this plugin leaves it to it and
+only shows it.
+
+Plugin Changelog
+================
+
+1.0.0
+
+* Initial release

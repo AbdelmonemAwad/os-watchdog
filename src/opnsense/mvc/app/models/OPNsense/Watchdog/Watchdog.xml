@@ -1,0 +1,35 @@
+<!--
+    SPDX-License-Identifier: BSD-2-Clause
+    Copyright (c) 2026 Abdelmonem Awad <eg2@live.com>
+-->
+<model>
+    <mount>//OPNsense/Watchdog</mount>
+    <version>1.0.0</version>
+    <description>Hardware watchdog</description>
+    <items>
+        <!--
+            watchdog.sh and status.py read these straight out of /conf/config.xml by element name,
+            with no model in front of them (the boot hook runs before anything could ask one), so the
+            names are not free.
+        -->
+        <general>
+            <!-- On, as os-xgs-npu's own switch is by the owner's decision of 2026-10-17: installing a
+                 watchdog plugin is asking for the watchdog. -->
+            <enabled type="BooleanField">
+                <Required>Y</Required>
+                <Default>1</Default>
+            </enabled>
+            <!-- What watchdogd asks the timer for at every pat. 128 is what os-xgs-npu has run on the
+                 XGS 136 and 3300 since 2026-10-17. -->
+            <timeout type="OptionField">
+                <Required>Y</Required>
+                <Default>128</Default>
+                <OptionValues>
+                    <option_64 value="64">64</option_64>
+                    <option_128 value="128">128</option_128>
+                    <option_256 value="256">256</option_256>
+                </OptionValues>
+            </timeout>
+        </general>
+    </items>
+</model>
