@@ -1,0 +1,16 @@
+<!--
+    SPDX-License-Identifier: BSD-2-Clause
+    Copyright (c) 2026 Abdelmonem Awad <eg2@live.com>
+-->
+<menu>
+    <!--
+        Where os-xgs-npu is not installed: under System, beside Fan Control, and not under
+        Services, because the subject of this page is the machine itself - the timer that resets it
+        when it hangs, and why it last reset. It sits directly under System as a leaf of its own,
+        the way Fan Control does, so no order is given. place-menu.sh copies this file, or xgs.xml,
+        to the model's Menu/Menu.xml.
+    -->
+    <System>
+        <Watchdog VisibleName="Hardware Watchdog" cssClass="fa fa-heartbeat fa-fw" url="/ui/watchdog"/>
+    </System>
+</menu>

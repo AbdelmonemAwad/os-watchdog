@@ -1,0 +1,18 @@
+<!--
+    SPDX-License-Identifier: BSD-2-Clause
+    Copyright (c) 2026 Abdelmonem Awad <eg2@live.com>
+-->
+<form>
+    <field>
+        <id>watchdog.general.enabled</id>
+        <label>Hardware watchdog</label>
+        <type>checkbox</type>
+        <help>Arm the host's own watchdog timer at every boot. If the host stops working for longer than the timeout - a hang nothing else can recover from - the timer resets the machine by itself instead of waiting for somebody to pull the power. It is disarmed at every shutdown, so turning the machine off stays off.</help>
+    </field>
+    <field>
+        <id>watchdog.general.timeout</id>
+        <label>Timeout (seconds)</label>
+        <type>dropdown</type>
+        <help>How long the host may stop before the timer resets it. watchdogd asks for this at every pat, once a second; 128 is what has run on the Sophos XGS 136 and 3300.</help>
+    </field>
+</form>
