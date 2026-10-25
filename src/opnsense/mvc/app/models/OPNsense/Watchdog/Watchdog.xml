@@ -13,7 +13,7 @@
             names are not free.
         -->
         <general>
-            <!-- On, as os-xgs-npu's own switch is by the owner's decision of 2026-10-17: installing a
+            <!-- On, as os-xgs-npu's own switch is since 2026-10-17: installing a
                  watchdog plugin is asking for the watchdog. -->
             <enabled type="BooleanField">
                 <Required>Y</Required>
