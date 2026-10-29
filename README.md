@@ -82,12 +82,29 @@ a q35 machine whose ICH9 TCO timer resets the machine when it fires, on an Intel
 The ICH9 timer here is qemu's, not an Intel board's; the driver and the plugin's handling of it are
 the same.
 
+On the old XGS 3300, 2026-10-29: OPNsense 26.7.7 with os-xgs-npu installed. os-xgs-npu holds the
+AMD FCH timer there and reads the reset record itself, so this plugin stands aside. For the test,
+os-xgs-npu's watchdog was stopped and its two scripts moved aside, as on a machine without it - its
+hooks look for them first - and put back after.
+
+- **amdsbwd, armed by this plugin.** The page's Apply (`configctl watchdog restart`) answered
+  `armed: AMD FCH Rev 41h+ Watchdog Timer, 128 s`. Its status said armed by this plugin, and the
+  page showed it.
+- **The timer firing.** This plugin's watchdogd was killed with SIGKILL, so nothing disarmed the
+  timer. The appliance stopped answering about 130 seconds later and came back by itself: the FCH
+  timer resets after a single run of 128 s.
+- **The reset reason, read by this plugin.** At the next boot its start hook read the chipset's
+  record itself and logged `last reset: 0x02000800 - bit 11: no published meaning; bit 25: the
+  hardware watchdog expired`, kept as read by os-watchdog. The page showed the last restart as "the
+  hardware watchdog". The plugin armed the timer again at that boot.
+- **Put back.** With its scripts back, os-xgs-npu armed the timer again, and this plugin stood aside.
+
 Not tested: ~~installing it, the page in a browser~~ (both on 2026-10-25, above), ~~arming and
 disarming by this plugin (it stands aside on every appliance that has os-xgs-npu), `ichwd`, the
 package (built by `tools/make-package.sh`, added with pkg), and an install on a plain OPNsense,
-without os-xgs-npu~~ (all on 2026-10-29 in qemu, above). Still not: `amdsbwd` armed by this plugin,
+without os-xgs-npu~~ (all on 2026-10-29 in qemu, above). ~~Still not: `amdsbwd` armed by this plugin,
 which needs an AMD machine without os-xgs-npu, and the reset reason read by this plugin itself on
-such a machine.
+such a machine.~~ Both on the old XGS 3300, with os-xgs-npu's scripts set aside (2026-10-29, above).
 
 ## Installation
 
@@ -140,8 +157,14 @@ firewall when it is released, not before.
   and the installer's output in `update.log` beside it.
 - `self-update.py check` says what it would do and changes nothing.
 
-Not tested yet: an update taken this way - 1.0.0 is the first release, so none has been ahead of an
-installed copy.
+~~Not tested yet: an update taken this way - 1.0.0 is the first release, so none has been ahead of
+an installed copy.~~ Tested on 2026-10-29 on a plain OPNsense 26.7 in qemu, where the package had
+been added with pkg, which records no commit: `self-update.py check` found the release `v1.0.0`
+(f3cd9b8781a5) and nothing installed to compare it with, so to be taken. `self-update.py` fetched
+its source, ran its `install/install.sh` and answered `updated to v1.0.0 (f3cd9b8781a5)`, which the
+system log has too. `installed.json` then recorded that commit, from the stamp, and a second check
+found it identical: nothing to take. Not yet: a release ahead of the one installed - 1.0.0 is
+still the only release.
 
 ## Where it fits
 
