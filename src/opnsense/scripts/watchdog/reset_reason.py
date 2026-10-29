@@ -37,8 +37,13 @@ os-xgs-npu has read it at every boot since 2026-10-18 (its scripts/xgs/reset_rea
 is installed this one never touches the register: it takes os-xgs-npu's record of this boot instead,
 and says so. This file came from that one on 2026-10-22.
 
-Only on an AMD processor of family 17h or later (Family= in dmesg.boot), where the register exists.
-Never fails the caller.
+Only on an AMD processor of family 17h or later (Family= in dmesg.boot), where the register exists,
+and only on the machine itself. A virtual machine can be handed a Ryzen or an EPYC processor as it
+is, Family= and all, while nothing behind 0xFED803C0 is a chipset: what a read there returns is
+whatever the hypervisor answers, and writing it back writes to an address nobody knows. So since
+2026-10-29 nothing is read where kern.vm_guest is anything but "none", and a value with every bit set
+- what a read returns where nothing answers, never 32 causes at once - is taken as no record, and
+nothing is written back. Never fails the caller.
 """
 
 import json
@@ -57,6 +62,10 @@ TAG = 'os-watchdog-reset-reason'
 # os-xgs-npu's own reader and what it keeps: while it is installed, its record is the one of this boot
 PROJECT = os.environ.get('XGS_RESET_PROJECT', '/usr/local/opnsense/scripts/xgs/reset_reason.py')
 PROJECT_KEPT = os.environ.get('XGS_RESET_PROJECT_STATE', '/var/db/os-xgs-npu/reset-reason.json')
+# kern.vm_guest as a test gives it; read from the kernel otherwise
+VM_GUEST = os.environ.get('XGS_RESET_VM_GUEST')
+# what a read returns where nothing answers
+NOTHING_ANSWERS = 0xFFFFFFFF
 
 # The bits with a published meaning (the AMD list Linux carries); every other bit is printed by its
 # number. Bit 19 is what an ordinary reboot leaves here (the XGS 3300, 2026-10-18).
@@ -97,15 +106,32 @@ def describe(value):
     return '0x%08x - %s' % (value, '; '.join('bit %d: %s' % (b['bit'], b['reason']) for b in bits))
 
 
-def has_register():
-    """An AMD processor of family 17h or later: dmesg.boot's Origin= and Family= lines."""
+def vm_guest():
+    """kern.vm_guest: "none" on the machine itself, the hypervisor's name in a virtual machine."""
+    if VM_GUEST is not None:
+        return VM_GUEST
+    try:
+        return subprocess.run(['/sbin/sysctl', '-n', 'kern.vm_guest'], capture_output=True,
+                              text=True, timeout=10).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return ''
+
+
+def no_register():
+    """Why this host has no reset record to read, or None where it has one: an AMD processor of
+    family 17h or later (dmesg.boot's Origin= and Family= lines), not in a virtual machine."""
+    guest = vm_guest()
+    if guest != 'none':
+        return 'a virtual machine (%s), with no chipset behind the address' % (guest or 'unknown')
     try:
         with open(DMESG, 'r', encoding='utf-8', errors='replace') as handle:
             text = handle.read()
     except OSError:
-        return False
+        return 'no %s to tell the processor by' % DMESG
     match = re.search(r'Family=0x([0-9a-fA-F]+)', text)
-    return 'AuthenticAMD' in text and bool(match) and int(match.group(1), 16) >= 0x17
+    if 'AuthenticAMD' in text and match and int(match.group(1), 16) >= 0x17:
+        return None
+    return 'no AMD family 17h or later processor here'
 
 
 def boot_time():
@@ -164,8 +190,9 @@ def from_project(boot):
 
 
 def at_boot():
-    if not has_register():
-        print('no AMD family 17h or later processor here; nothing to read')
+    why = no_register()
+    if why:
+        print(why + '; nothing to read')
         return 0
     boot = boot_time()
     if os.path.exists(PROJECT):
@@ -184,6 +211,13 @@ def at_boot():
             os.close(fd)
     except OSError as error:
         log('cannot read the reset record: %s' % error.strerror)
+        return 0
+    # Every bit set is nothing answering, not a record: neither kept nor written back.
+    if value == NOTHING_ANSWERS:
+        message = 'the reset record reads 0x%08x - nothing answers at 0x%08x; nothing kept' % (
+            value, OFFSET)
+        log(message)
+        print(message)
         return 0
     # Cleared apart from the read, so that a host that refuses writes to /dev/mem (a raised
     # securelevel) still has its reason read and kept.

@@ -20,6 +20,9 @@ Arms the hardware watchdog of the host, so a host that stops running is reset by
   the processor: `amdsbwd` (the AMD FCH's timer) on AMD, `ichwd` on Intel;
 - on AMD processors of family 17h or later, reads at every boot why the host last reset - the
   FCH's `S5_RESET_STATUS` register, one bit for each cause - keeps it, and clears it for the next boot;
+  on the machine itself only: not in a virtual machine, where the processor can be a Ryzen or an EPYC
+  with no chipset behind the register's address, and never a value with every bit set, which is what
+  a read returns where nothing answers - neither is kept or written back (since 2026-10-29);
 - **System: Hardware Watchdog** (XGS: Hardware Watchdog when os-xgs-npu is installed): whether the
   timer is armed and by whom, the timer, the last restart with each bit it set, and two settings -
   on or off, and the timeout (64, 128 or 256 seconds).
