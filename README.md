@@ -16,8 +16,11 @@ Arms the hardware watchdog of the host, so a host that stops running is reset by
 ## What it does
 
 - arms the chipset's watchdog timer with watchdogd(8) at every boot, when the setting says so, and
-  disarms it at every shutdown, so turning the machine off stays off. The timer's driver is chosen by
-  the processor: `amdsbwd` (the AMD FCH's timer) on AMD, `ichwd` on Intel;
+  disarms it at every shutdown, so turning the machine off stays off. ~~The timer's driver is chosen
+  by the processor: `amdsbwd` (the AMD FCH's timer) on AMD, `ichwd` on Intel;~~ The timer's driver is
+  the first of `amdsbwd` (the AMD FCH's timer) and `ichwd` (Intel's ICH and PCH, and the ICH9 of
+  qemu's q35 board) that attaches - since 2026-10-29: chosen by the processor, a virtual machine on
+  an AMD host with the q35 board would be given `amdsbwd`, find no timer, and be left unarmed;
 - on AMD processors of family 17h or later, reads at every boot why the host last reset - the
   FCH's `S5_RESET_STATUS` register, one bit for each cause - keeps it, and clears it for the next boot;
   on the machine itself only: not in a virtual machine, where the processor can be a Ryzen or an EPYC
