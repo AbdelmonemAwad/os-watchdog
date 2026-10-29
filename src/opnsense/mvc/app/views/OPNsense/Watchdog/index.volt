@@ -193,10 +193,12 @@
                 $progress.removeClass('fa fa-spinner fa-pulse');
                 $button.prop('disabled', false);
             };
+            /* What watchdog.sh answers is not shown under the form: it is English, a sentence in the
+               middle of a page in another language, and the cards read again right after say the
+               same - armed or not, by whom, the timer - in the page's language (2026-10-29). */
             saveFormToEndpoint('/api/watchdog/settings/set', 'frm_general', function () {
-                ajaxCall('/api/watchdog/service/reconfigure', {}, function (data) {
+                ajaxCall('/api/watchdog/service/reconfigure', {}, function () {
                     done();
-                    $('#wd-result').text(data && data.output ? plain(data.output) : '').toggle(!!(data && data.output));
                     refresh();
                 });
             }, false, done);
@@ -225,7 +227,6 @@
 <div class="tab-content content-box">
     <div id="settings" class="tab-pane active">
         {{ partial("layout_partials/base_form", ['fields': generalForm, 'id': 'frm_general', 'apply_btn_id': 'saveAct']) }}
-        <div id="wd-result" class="text-muted" style="display: none; clear: both; padding: 0 15px 15px;"></div>
     </div>
     <div id="reset" class="tab-pane">
         <div class="text-muted" style="padding: 10px 15px 0;">
