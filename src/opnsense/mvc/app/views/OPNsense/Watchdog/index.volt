@@ -140,7 +140,12 @@
                 record.read_by ? "{{ lang._('Read by') }}" + ': ' + record.read_by :
                     "{{ lang._('read from the chipset at each boot') }}"));
 
-            $('#wd-project').toggle(data.held_by === 'os-xgs-npu');
+            /* While os-xgs-npu's watchdog script is installed this plugin stands aside, whatever
+               os-xgs-npu's own switch says: with that switch off nothing arms the timer, and the
+               page says so rather than that os-xgs-npu arms it (2026-10-29). */
+            const project = data.held_by === 'os-xgs-npu';
+            $('#wd-project').toggle(project && data.project_enabled !== false);
+            $('#wd-project-off').toggle(project && data.project_enabled === false);
 
             const $rows = $('#wd-bits tbody').empty();
             const bits = data.reset && data.reset.bits ? data.reset.bits : [];
@@ -198,7 +203,10 @@
 <div class="clearfix" style="margin-bottom: 10px;">
     <button id="refreshAct" class="btn btn-default btn-xs pull-right" type="button" title="{{ lang._('Refresh') }}"><i class="fa fa-fw fa-refresh"></i></button>
     <span id="wd-project" class="text-muted" style="display: none;">
-        {{ lang._('os-xgs-npu arms the watchdog of this host, by its own setting in XGS: Settings. This plugin leaves the timer to it and only shows it; the settings below take over once os-xgs-npu no longer arms it.') }}
+        {{ lang._('os-xgs-npu arms the watchdog of this host, by its own setting in XGS: Settings. While its watchdog script is installed this plugin leaves the timer to it and only shows it; the settings below take over once that script is removed.') }}
+    </span>
+    <span id="wd-project-off" class="text-muted" style="display: none;">
+        {{ lang._('os-xgs-npu has its watchdog switched off in XGS: Settings. While its watchdog script is installed this plugin does not arm the timer either, so nothing arms it; the settings below take over once that script is removed.') }}
     </span>
 </div>
 

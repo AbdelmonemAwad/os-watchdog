@@ -24,7 +24,8 @@
 # (scripts/xgs/watchdog.sh, its setting in XGS: Settings). While that script is installed this one
 # leaves the timer to it and only reports: two daemons patting one timer, each disarming it when it
 # stops, would leave nobody sure whether the host is covered. The same goes for a watchdogd somebody
-# started by hand. This plugin's own settings take over once os-xgs-npu no longer arms it.
+# started by hand. This plugin's own settings take over once that script is removed - not when
+# os-xgs-npu's own switch is off, which leaves the timer unarmed; the page says which (2026-10-29).
 #
 # Never fails the caller: a host without a timer, the setting off, or the timer held elsewhere is
 # reported and exits 0.

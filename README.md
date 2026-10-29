@@ -43,7 +43,9 @@ aside while they are installed:
 
 - **the timer** - one watchdogd at a time. While os-xgs-npu's script is installed, this plugin does
   not start its own; the page shows os-xgs-npu's watchdogd and says that its own settings take over
-  once os-xgs-npu no longer arms it. A watchdogd started by anything else is left alone the same way;
+  ~~once os-xgs-npu no longer arms it~~ once that script is removed - not when os-xgs-npu's own switch
+  in XGS: Settings is off, which leaves the timer unarmed, as the page then says (2026-10-29). A
+  watchdogd started by anything else is left alone the same way;
 - **the reset record** - the first read of a boot clears it, so there is one reader a boot.
   os-xgs-npu's hook runs first (start/06); this plugin's (start/07) takes os-xgs-npu's record of
   the boot instead of reading the register.
