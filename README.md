@@ -131,8 +131,9 @@ commit for the self-update. Safe to run again: the settings in config.xml are ke
 config.xml.
 
 **From a release's package.** A release carries `os-watchdog-<version>.pkg` and `SHA256SUMS`, built
-by `tools/make-package.sh` in the release workflow; installing it has not been tested yet. Check it
-and read it before adding it, as root:
+by `tools/make-package.sh` in the release workflow; ~~installing it has not been tested yet~~ it was
+installed with `pkg add` on a plain OPNsense 26.7 on 2026-10-29 - see [What is tested](#what-is-tested).
+Check it and read it before adding it, as root:
 
 ```sh
 sha256sum -c SHA256SUMS
