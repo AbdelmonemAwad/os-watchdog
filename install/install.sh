@@ -56,9 +56,16 @@ install -d -m 0755 /usr/local/share/os-watchdog
 printf '{"commit": "%s", "date": "%s", "source": "%s", "installed_at": %s}\n' \
     "${REV}" "${RDATE}" "${RSRC}" "$(date +%s)" > /usr/local/share/os-watchdog/installed.json
 
-# What the boot hooks would do, now: the cause of this boot's reset, unless something read it
-# already, and the timer armed if the setting says so - or left to os-xgs-npu where it holds it.
-/usr/local/opnsense/scripts/watchdog/reset_reason.py boot || true
+# What the boot hooks would do, now: the cause of this boot's reset, and the timer armed if the
+# setting says so - or left to os-xgs-npu where it holds it.
+#
+# The cause only where none is kept yet, which is a first install. Any other install is an update,
+# made after the start hook read this boot's record, and that read cleared the register: a second
+# one finds it empty. reset_reason.py tells a second read in one boot by kern.boottime, which moves
+# when the clock is stepped, so after a step an update could read the cleared register again and
+# keep "power on" over the real cause (seen in the code, 2026-10-29).
+[ -e /var/db/os-watchdog/reset-reason.json ] ||
+    /usr/local/opnsense/scripts/watchdog/reset_reason.py boot || true
 /bin/sh /usr/local/opnsense/scripts/watchdog/watchdog.sh start || true
 
 if [ "${WHERE}" = xgs ]; then
