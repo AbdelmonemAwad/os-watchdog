@@ -61,7 +61,9 @@
         /* KIT-JS-END */
 
         /* The cause that matters most among the bits the chipset set, judged as os-xgs-npu's status
-           page judges it, so the two pages never disagree about the same restart. */
+           page judges it, so the two pages never disagree about the same restart. The words lost
+           their leading "the" here on 2026-10-29, as the page's values do; os-xgs-npu's page has it
+           still. */
         function restart(r) {
             if (!r || !r.value) {
                 return {cls: '', what: "{{ lang._('not recorded') }}"};
@@ -69,12 +71,12 @@
             const bits = (r.bits || []).map(function (b) { return b.bit; });
             const has = function (list) { return list.some(function (b) { return bits.indexOf(b) >= 0; }); };
             if (has([27, 31, 30])) { return {cls: 'bad', what: "{{ lang._('an uncorrected hardware error') }}"}; }
-            if (has([23])) { return {cls: 'bad', what: "{{ lang._('the processor shut down') }}"}; }
+            if (has([23])) { return {cls: 'bad', what: "{{ lang._('processor shutdown') }}"}; }
             if (has([0, 9])) { return {cls: 'bad', what: "{{ lang._('overheating') }}"}; }
-            if (has([25])) { return {cls: 'warn', what: "{{ lang._('the hardware watchdog') }}"}; }
+            if (has([25])) { return {cls: 'warn', what: "{{ lang._('hardware watchdog') }}"}; }
             if (has([24, 29])) { return {cls: 'warn', what: "{{ lang._('a failed boot') }}"}; }
-            if (has([16, 22, 26])) { return {cls: 'warn', what: "{{ lang._('the reset pin') }}"}; }
-            if (has([1, 2, 4])) { return {cls: 'warn', what: "{{ lang._('the power button') }}"}; }
+            if (has([16, 22, 26])) { return {cls: 'warn', what: "{{ lang._('reset pin') }}"}; }
+            if (has([1, 2, 4])) { return {cls: 'warn', what: "{{ lang._('power button') }}"}; }
             if (has([17, 18, 19, 20])) { return {cls: 'ok', what: "{{ lang._('a reboot') }}"}; }
             if (has([21])) { return {cls: 'ok', what: "{{ lang._('a sleep state') }}"}; }
             return {cls: 'ok', what: "{{ lang._('power on') }}"};
@@ -83,24 +85,24 @@
         /* What each bit means, in the page's language; reset_reason.py's English is the fallback for
            a bit with no published meaning. */
         const reasons = {
-            0: "{{ lang._('the thermal trip pin') }}",
-            1: "{{ lang._('the power button held for four seconds') }}",
-            2: "{{ lang._('the shutdown pin') }}",
+            0: "{{ lang._('thermal trip pin') }}",
+            1: "{{ lang._('power button held for four seconds') }}",
+            2: "{{ lang._('shutdown pin') }}",
             4: "{{ lang._('a remote power-off (ASF)') }}",
-            9: "{{ lang._('the processor thermal limit') }}",
-            16: "{{ lang._('the system reset pin') }}",
+            9: "{{ lang._('processor thermal limit') }}",
+            16: "{{ lang._('system reset pin') }}",
             17: "{{ lang._('a software PCI reset') }}",
             18: "{{ lang._('software wrote 0x4 to port 0xCF9') }}",
             19: "{{ lang._('software wrote 0x6 to port 0xCF9, as a reboot does') }}",
             20: "{{ lang._('software wrote 0xE to port 0xCF9') }}",
             21: "{{ lang._('a sleep-state transition (ACPI)') }}",
-            22: "{{ lang._('the keyboard reset pin') }}",
-            23: "{{ lang._('the processor shut down, as after a triple fault') }}",
-            24: "{{ lang._('the boot failed before its timer ran out') }}",
-            25: "{{ lang._('the hardware watchdog expired') }}",
+            22: "{{ lang._('keyboard reset pin') }}",
+            23: "{{ lang._('processor shutdown, as after a triple fault') }}",
+            24: "{{ lang._('boot failed before its timer ran out') }}",
+            25: "{{ lang._('hardware watchdog expired') }}",
             26: "{{ lang._('a remote reset (ASF)') }}",
             27: "{{ lang._('a sync flood after an uncorrected error') }}",
-            29: "{{ lang._('the chipset and the processor power controller failed the warm-reset handshake') }}",
+            29: "{{ lang._('chipset and processor power controller failed the warm-reset handshake') }}",
             30: "{{ lang._('a parity error') }}",
             31: "{{ lang._('a sync flood asked for by software') }}"
         };
