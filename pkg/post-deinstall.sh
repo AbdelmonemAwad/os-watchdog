@@ -25,6 +25,15 @@ rm -f /usr/local/opnsense/mvc/app/models/OPNsense/Watchdog/Menu/Menu.xml
 rmdir /usr/local/opnsense/mvc/app/models/OPNsense/Watchdog/Menu /usr/local/opnsense/mvc/app/models/OPNsense/Watchdog 2>/dev/null || true
 rm -f /var/lib/php/tmp/opnsense_menu_cache.xml /tmp/opnsense_menu_cache.xml
 
+# What pkg never knew of, so never removes (2026-10-29): /usr/local/share/os-watchdog, where the
+# self-update keeps what it installed and its output - a package install that took a self-update ran
+# install/install.sh outside pkg - and the compiled Python that install.sh's syntax check and
+# status.py's import leave beside the scripts. Without it the scripts' directory is empty, and goes
+# too. Only this plugin's own paths.
+rm -rf /usr/local/share/os-watchdog /usr/local/opnsense/scripts/watchdog/__pycache__
+rmdir /usr/local/opnsense/scripts/watchdog/i18n/ui /usr/local/opnsense/scripts/watchdog/i18n \
+    /usr/local/opnsense/scripts/watchdog/menu /usr/local/opnsense/scripts/watchdog 2>/dev/null || true
+
 # Kept on purpose: the settings in config.xml, and /var/db/os-watchdog with the last reset record.
 # Remove the record with:  rm -rf /var/db/os-watchdog
 echo "Hardware Watchdog removed; the settings in config.xml are kept"
