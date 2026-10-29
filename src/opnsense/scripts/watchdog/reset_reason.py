@@ -119,7 +119,8 @@ def vm_guest():
 
 def no_register():
     """Why this host has no reset record to read, or None where it has one: an AMD processor of
-    family 17h or later (dmesg.boot's Origin= and Family= lines), not in a virtual machine."""
+    family 17h or later (dmesg.boot's Origin= and Family= lines), not in a virtual machine. The
+    page asks the same question through status.py."""
     guest = vm_guest()
     if guest != 'none':
         return 'a virtual machine (%s), with no chipset behind the address' % (guest or 'unknown')
