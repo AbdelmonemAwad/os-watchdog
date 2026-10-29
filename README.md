@@ -64,10 +64,30 @@ On the first XGS 3300, 2026-10-25, OPNsense 26.7.7 with os-xgs-npu installed, be
 - its menu place: under **XGS** with os-xgs-npu installed; in its own section, **System**, when
   os-xgs-npu's menu file was set aside, and back under XGS when it was put back (`place-menu.sh`).
 
-Not tested: ~~installing it, the page in a browser~~ (both on 2026-10-25, above), arming and
+On a plain OPNsense 26.7 in qemu, 2026-10-29: the nano image with nothing of os-xgs-npu on it, on
+a q35 machine whose ICH9 TCO timer resets the machine when it fires, on an Intel Xeon host.
+
+- **The package.** `os-watchdog-1.0.0.pkg` and `SHA256SUMS` were fetched from the release and the
+  sum checked OK. `pkg add` returned 0, and the page is under **System**: System > Hardware Watchdog.
+- **ichwd, armed by this plugin.** `ichwd0: <Intel ICH9 watchdog timer>` attached, and the plugin
+  armed it at once - `armed: Intel ICH9 watchdog timer, 128 s` - and again at every boot after.
+- **The timer firing.** With watchdogd paused (`kill -STOP`), the timer stayed armed and was no
+  longer patted. The machine was reset about 270 seconds later, after the ICH9 timer's two runs of
+  128 s. At the next boot ichwd said `resuming after hardware watchdog timeout`, and the plugin armed
+  it again.
+- **Disarming at shutdown.** An orderly reboot ran its stop script and came straight back, with no
+  timeout reported. A `shutdown -h` - halted, not powered off - stayed halted for 330 seconds, longer
+  than the timer's two runs: turning the machine off stays off.
+
+The ICH9 timer here is qemu's, not an Intel board's; the driver and the plugin's handling of it are
+the same.
+
+Not tested: ~~installing it, the page in a browser~~ (both on 2026-10-25, above), ~~arming and
 disarming by this plugin (it stands aside on every appliance that has os-xgs-npu), `ichwd`, the
 package (built by `tools/make-package.sh`, added with pkg), and an install on a plain OPNsense,
-without os-xgs-npu.
+without os-xgs-npu~~ (all on 2026-10-29 in qemu, above). Still not: `amdsbwd` armed by this plugin,
+which needs an AMD machine without os-xgs-npu, and the reset reason read by this plugin itself on
+such a machine.
 
 ## Installation
 
