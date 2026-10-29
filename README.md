@@ -1,4 +1,21 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/banner-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/readme/banner-light.svg">
+  <img src="docs/images/readme/banner-light.svg" alt="os-watchdog - A firewall that hangs resets itself, and says why it did" width="100%">
+</picture>
+
 # Hardware Watchdog for OPNsense
+
+[![release](https://img.shields.io/github/v/release/AbdelmonemAwad/os-watchdog?sort=semver&style=flat-square&color=555555)](https://github.com/AbdelmonemAwad/os-watchdog/releases/latest)
+[![checks](https://github.com/AbdelmonemAwad/os-watchdog/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/AbdelmonemAwad/os-watchdog/actions/workflows/checks.yml)
+[![licence: BSD-2-Clause](https://img.shields.io/badge/licence-BSD--2--Clause-blue.svg?style=flat-square)](LICENSE)
+[![OPNsense 26.7](https://img.shields.io/badge/OPNsense-26.7-d94f00.svg?style=flat-square)](#what-is-tested)
+[![part of os-xgs-npu](https://img.shields.io/badge/part%20of-os--xgs--npu-9a6700.svg?style=flat-square)](https://github.com/AbdelmonemAwad/os-xgs-npu)
+
+[![amdsbwd, XGS 3300: reset about 130 s after watchdogd was killed](https://img.shields.io/badge/amdsbwd%2C%20XGS%203300-reset%20about%20130%20s%20after%20watchdogd%20was%20killed-brightgreen.svg?style=flat-square)](#what-is-tested)
+[![ichwd, qemu: reset about 270 s after watchdogd stopped](https://img.shields.io/badge/ichwd%2C%20qemu-reset%20about%20270%20s%20after%20watchdogd%20stopped-brightgreen.svg?style=flat-square)](#what-is-tested)
+[![reset reason: bit 25, the watchdog expired, read by the plugin](https://img.shields.io/badge/reset%20reason-bit%2025%2C%20the%20watchdog%20expired%2C%20read%20by%20the%20plugin-brightgreen.svg?style=flat-square)](#what-is-tested)
+[![shutdown -h: stays off, 330 s](https://img.shields.io/badge/shutdown%20--h-stays%20off%2C%20330%20s-brightgreen.svg?style=flat-square)](#what-is-tested)
 
 Arms the hardware watchdog of the host, so a host that stops running is reset by its own hardware instead of waiting for someone to pull the power - and reads from the chipset why the host last reset. OPNsense arms no watchdog of its own.
 
@@ -8,6 +25,9 @@ Arms the hardware watchdog of the host, so a host that stops running is reset by
 >
 > ~~**Written, not released (2026-10-22).** The code is here; there is no release, and it has not been
 > installed on an appliance yet. What was run is listed under [What is tested](#what-is-tested).~~
+>
+> **1.0.1 (2026-10-30):** no chipset read in a virtual machine, an install that keeps the reset record, the timer armed whichever of amdsbwd and ichwd attaches, and the page's values short and in Arabic. Tested in qemu on OPNsense 26.7.7 before the release; see
+> [What is tested](#what-is-tested).
 >
 > **1.0.0, the first release (2026-10-25).** Installed and its page opened on an XGS 3300 (OPNsense
 > 26.7.7) before the release; updated from XGS: Updates when os-xgs-npu is installed, or by its own
@@ -137,8 +157,8 @@ Check it and read it before adding it, as root:
 
 ```sh
 sha256sum -c SHA256SUMS
-pkg info -lF os-watchdog-1.0.0.pkg      # every file it will write
-pkg add os-watchdog-1.0.0.pkg
+pkg info -lF os-watchdog-*.pkg       # every file it will write
+pkg add os-watchdog-*.pkg
 ```
 
 `pkg delete os-watchdog` disarms the timer before the files go, and keeps the settings and

@@ -10,6 +10,14 @@ only shows it.
 Plugin Changelog
 ================
 
+1.0.1
+
+* nothing read from the chipset in a virtual machine, and a record of all ones kept as none
+* an install or an update reads the reset reason only where none is kept yet
+* the timer is whichever of amdsbwd and ichwd attaches
+* the page: the restart's causes without a leading "the", "not available" where no chipset keeps a record, a note when os-xgs-npu's own watchdog is off, no English line after Apply
+* removal also takes what a self-update left
+
 1.0.0
 
 * Initial release
