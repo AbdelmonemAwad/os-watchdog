@@ -13,6 +13,6 @@
         Menu/Menu.xml.
     -->
     <XGS VisibleName="XGS" cssClass="fa fa-microchip fa-fw" order="35">
-        <Watchdog order="53" VisibleName="Hardware Watchdog" url="/ui/watchdog"/>
+        <Watchdog order="53" VisibleName="Hardware Watchdog" cssClass="fa fa-stopwatch fa-fw" url="/ui/watchdog"/>
     </XGS>
 </menu>

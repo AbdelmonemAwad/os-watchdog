@@ -11,6 +11,6 @@
         to the model's Menu/Menu.xml.
     -->
     <System>
-        <Watchdog VisibleName="Hardware Watchdog" cssClass="fa fa-heartbeat fa-fw" url="/ui/watchdog"/>
+        <Watchdog VisibleName="Hardware Watchdog" cssClass="fa fa-stopwatch fa-fw" url="/ui/watchdog"/>
     </System>
 </menu>
