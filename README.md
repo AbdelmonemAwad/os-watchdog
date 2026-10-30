@@ -29,8 +29,9 @@ Arms the hardware watchdog of the host, so a host that stops running is reset by
 > ~~**Written, not released (2026-10-22).** The code is here; there is no release, and it has not been
 > installed on an appliance yet. What was run is listed under [What is tested](#what-is-tested).~~
 >
-> **1.0.1 (2026-10-30):** no chipset read in a virtual machine, an install that keeps the reset record, the timer armed whichever of amdsbwd and ichwd attaches, and the page's values short and in Arabic. Tested in qemu on OPNsense 26.7.7 before the release; see
-> [What is tested](#what-is-tested).
+> **1.0.1 (2026-10-30):** no chipset read in a virtual machine, an install that keeps the reset record, the timer armed whichever of amdsbwd and ichwd attaches, and the page's values short and in Arabic. ~~Tested in qemu on OPNsense 26.7.7 before the release; see~~ Tested in part before the
+> release, in qemu on OPNsense 26.7.7 from the branch that became it; what ran and what did not
+> is under [What is tested](#what-is-tested).
 >
 > **1.0.0, the first release (2026-10-25).** Installed and its page opened on an XGS 3300 (OPNsense
 > 26.7.7) before the release; updated from XGS: Updates when os-xgs-npu is installed, or by its own
@@ -139,6 +140,13 @@ without os-xgs-npu~~ (all on 2026-10-29 in qemu, above). ~~Still not: `amdsbwd` 
 which needs an AMD machine without os-xgs-npu, and the reset reason read by this plugin itself on
 such a machine.~~ Both on the old XGS 3300, with os-xgs-npu's scripts set aside (2026-10-29, above).
 
+1.0.1's branch, run on 2026-10-29 in qemu on OPNsense 26.7.7, before its release commit: in a
+virtual machine nothing is read from the chipset - `a virtual machine (kvm), with no chipset behind
+the address; nothing to read`. Not exercised there: an install keeping the reset record (none was
+kept to keep), the timer armed by whichever of amdsbwd and ichwd attaches (the 1.0.0 copy had armed
+it already), a record of all ones kept as none, and the removal of what a self-update left. The
+page's values without "the" and its reworded note were seen on the XGS 3300.
+
 ## Installation
 
 It is not in the OPNsense plugin repository, so there is no `pkg install os-watchdog`.
@@ -192,7 +200,7 @@ firewall when it is released, not before.
 - `self-update.py check` says what it would do and changes nothing.
 
 ~~Not tested yet: an update taken this way - 1.0.0 is the first release, so none has been ahead of
-an installed copy.~~ Tested on 2026-10-29 on a plain OPNsense 26.7 in qemu, where the package had
+an installed copy.~~ Tested on 2026-10-29 on a plain OPNsense ~~26.7~~ 26.7.7 in qemu, where the package had
 been added with pkg, which records no commit: `self-update.py check` found the release `v1.0.0`
 (f3cd9b8781a5) and nothing installed to compare it with, so to be taken. `self-update.py` fetched
 its source, ran its `install/install.sh` and answered `updated to v1.0.0 (f3cd9b8781a5)`, which the
