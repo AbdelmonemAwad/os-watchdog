@@ -1,4 +1,21 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/banner-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/readme/banner-light.svg">
+  <img src="docs/images/readme/banner-light.svg" alt="os-watchdog - A firewall that hangs resets itself, and says why it did" width="100%">
+</picture>
+
 # Hardware Watchdog for OPNsense
+
+[![release](https://img.shields.io/github/v/release/AbdelmonemAwad/os-watchdog?sort=semver&style=flat-square&color=555555)](https://github.com/AbdelmonemAwad/os-watchdog/releases/latest)
+[![checks](https://github.com/AbdelmonemAwad/os-watchdog/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/AbdelmonemAwad/os-watchdog/actions/workflows/checks.yml)
+[![licence: BSD-2-Clause](https://img.shields.io/badge/licence-BSD--2--Clause-blue.svg?style=flat-square)](LICENSE)
+[![OPNsense 26.7](https://img.shields.io/badge/OPNsense-26.7-d94f00.svg?style=flat-square)](#what-is-tested)
+[![part of os-xgs-npu](https://img.shields.io/badge/part%20of-os--xgs--npu-9a6700.svg?style=flat-square)](https://github.com/AbdelmonemAwad/os-xgs-npu)
+
+[![amdsbwd, XGS 3300: reset about 130 s after watchdogd was killed](https://img.shields.io/badge/amdsbwd%2C%20XGS%203300-reset%20about%20130%20s%20after%20watchdogd%20was%20killed-brightgreen.svg?style=flat-square)](#what-is-tested)
+[![ichwd, qemu: reset about 270 s after watchdogd stopped](https://img.shields.io/badge/ichwd%2C%20qemu-reset%20about%20270%20s%20after%20watchdogd%20stopped-brightgreen.svg?style=flat-square)](#what-is-tested)
+[![reset reason: bit 25, the watchdog expired, read by the plugin](https://img.shields.io/badge/reset%20reason-bit%2025%2C%20the%20watchdog%20expired%2C%20read%20by%20the%20plugin-brightgreen.svg?style=flat-square)](#what-is-tested)
+[![shutdown -h: stays off, 330 s](https://img.shields.io/badge/shutdown%20--h-stays%20off%2C%20330%20s-brightgreen.svg?style=flat-square)](#what-is-tested)
 
 Arms the hardware watchdog of the host, so a host that stops running is reset by its own hardware instead of waiting for someone to pull the power - and reads from the chipset why the host last reset. OPNsense arms no watchdog of its own.
 
@@ -9,6 +26,9 @@ Arms the hardware watchdog of the host, so a host that stops running is reset by
 > ~~**Written, not released (2026-10-22).** The code is here; there is no release, and it has not been
 > installed on an appliance yet. What was run is listed under [What is tested](#what-is-tested).~~
 >
+> **1.0.1 (2026-10-30):** no chipset read in a virtual machine, an install that keeps the reset record, the timer armed whichever of amdsbwd and ichwd attaches, and the page's values short and in Arabic. Tested in qemu on OPNsense 26.7.7 before the release; see
+> [What is tested](#what-is-tested).
+>
 > **1.0.0, the first release (2026-10-25).** Installed and its page opened on an XGS 3300 (OPNsense
 > 26.7.7) before the release; updated from XGS: Updates when os-xgs-npu is installed, or by its own
 > self-update - see [Updates](#updates).
@@ -16,10 +36,16 @@ Arms the hardware watchdog of the host, so a host that stops running is reset by
 ## What it does
 
 - arms the chipset's watchdog timer with watchdogd(8) at every boot, when the setting says so, and
-  disarms it at every shutdown, so turning the machine off stays off. The timer's driver is chosen by
-  the processor: `amdsbwd` (the AMD FCH's timer) on AMD, `ichwd` on Intel;
+  disarms it at every shutdown, so turning the machine off stays off. ~~The timer's driver is chosen
+  by the processor: `amdsbwd` (the AMD FCH's timer) on AMD, `ichwd` on Intel;~~ The timer's driver is
+  the first of `amdsbwd` (the AMD FCH's timer) and `ichwd` (Intel's ICH and PCH, and the ICH9 of
+  qemu's q35 board) that attaches - since 2026-10-29: chosen by the processor, a virtual machine on
+  an AMD host with the q35 board would be given `amdsbwd`, find no timer, and be left unarmed;
 - on AMD processors of family 17h or later, reads at every boot why the host last reset - the
   FCH's `S5_RESET_STATUS` register, one bit for each cause - keeps it, and clears it for the next boot;
+  on the machine itself only: not in a virtual machine, where the processor can be a Ryzen or an EPYC
+  with no chipset behind the register's address, and never a value with every bit set, which is what
+  a read returns where nothing answers - neither is kept or written back (since 2026-10-29);
 - **System: Hardware Watchdog** (XGS: Hardware Watchdog when os-xgs-npu is installed): whether the
   timer is armed and by whom, the timer, the last restart with each bit it set, and two settings -
   on or off, and the timeout (64, 128 or 256 seconds).
@@ -37,7 +63,9 @@ aside while they are installed:
 
 - **the timer** - one watchdogd at a time. While os-xgs-npu's script is installed, this plugin does
   not start its own; the page shows os-xgs-npu's watchdogd and says that its own settings take over
-  once os-xgs-npu no longer arms it. A watchdogd started by anything else is left alone the same way;
+  ~~once os-xgs-npu no longer arms it~~ once that script is removed - not when os-xgs-npu's own switch
+  in XGS: Settings is off, which leaves the timer unarmed, as the page then says (2026-10-29). A
+  watchdogd started by anything else is left alone the same way;
 - **the reset record** - the first read of a boot clears it, so there is one reader a boot.
   os-xgs-npu's hook runs first (start/06); this plugin's (start/07) takes os-xgs-npu's record of
   the boot instead of reading the register.
@@ -123,13 +151,14 @@ commit for the self-update. Safe to run again: the settings in config.xml are ke
 config.xml.
 
 **From a release's package.** A release carries `os-watchdog-<version>.pkg` and `SHA256SUMS`, built
-by `tools/make-package.sh` in the release workflow; installing it has not been tested yet. Check it
-and read it before adding it, as root:
+by `tools/make-package.sh` in the release workflow; ~~installing it has not been tested yet~~ it was
+installed with `pkg add` on a plain OPNsense 26.7 on 2026-10-29 - see [What is tested](#what-is-tested).
+Check it and read it before adding it, as root:
 
 ```sh
 sha256sum -c SHA256SUMS
-pkg info -lF os-watchdog-1.0.0.pkg      # every file it will write
-pkg add os-watchdog-1.0.0.pkg
+pkg info -lF os-watchdog-*.pkg       # every file it will write
+pkg add os-watchdog-*.pkg
 ```
 
 `pkg delete os-watchdog` disarms the timer before the files go, and keeps the settings and

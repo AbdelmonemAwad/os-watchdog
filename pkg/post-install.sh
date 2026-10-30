@@ -29,10 +29,14 @@ if [ -f /usr/local/etc/rc.configure_plugins ]; then
 	/usr/local/etc/rc.configure_plugins POST_INSTALL
 fi
 
-# What the boot hooks would do, now: the cause of this boot's reset unless something read it
-# already, and the timer armed if the setting says so - left alone where os-xgs-npu holds it, and
-# left running across an upgrade.
-/usr/local/opnsense/scripts/watchdog/reset_reason.py boot > /dev/null 2>&1 || true
+# What the boot hooks would do, now: the cause of this boot's reset, and the timer armed if the
+# setting says so - left alone where os-xgs-npu holds it, and left running across an upgrade.
+#
+# The cause only where none is kept yet, which is a first install: an upgrade comes after the start
+# hook read this boot's record and cleared the register, and a second read after a clock step can
+# keep the empty register over the real cause - install/install.sh says why.
+[ -e /var/db/os-watchdog/reset-reason.json ] ||
+    /usr/local/opnsense/scripts/watchdog/reset_reason.py boot > /dev/null 2>&1 || true
 /bin/sh /usr/local/opnsense/scripts/watchdog/watchdog.sh start || true
 
 # The page's place in the menu: the XGS section where os-xgs-npu is installed, System where it is

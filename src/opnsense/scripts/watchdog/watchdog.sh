@@ -24,7 +24,8 @@
 # (scripts/xgs/watchdog.sh, its setting in XGS: Settings). While that script is installed this one
 # leaves the timer to it and only reports: two daemons patting one timer, each disarming it when it
 # stops, would leave nobody sure whether the host is covered. The same goes for a watchdogd somebody
-# started by hand. This plugin's own settings take over once os-xgs-npu no longer arms it.
+# started by hand. This plugin's own settings take over once that script is removed - not when
+# os-xgs-npu's own switch is off, which leaves the timer unarmed; the page says which (2026-10-29).
 #
 # Never fails the caller: a host without a timer, the setting off, or the timer held elsewhere is
 # reported and exits 0.
@@ -71,16 +72,22 @@ held_elsewhere() {
 	done
 }
 
-# The timer's driver for this processor: amdsbwd on AMD, ichwd on Intel. Loaded if it is not, and its
-# description printed when it attached; nothing printed when there is no timer.
+# The timer's driver: amdsbwd, then ichwd - each loaded if it is not, and the description of the first
+# that attached printed; nothing printed when neither found a timer. Until 2026-10-29 the processor
+# chose one, amdsbwd on AMD and ichwd on Intel, but the timer is the chipset's: a virtual machine on
+# an AMD host, on qemu's q35 board, has the ICH9 timer that ichwd drives, and would be given amdsbwd,
+# which finds nothing there - so it would never be armed. Each driver looks for its own maker's
+# controller by its PCI identity and attaches nothing where it is not; one that found nothing stays
+# loaded, idle, as ichwd always did on an Intel board without the timer.
 timer() {
-	case $(/sbin/sysctl -n hw.model 2>/dev/null) in
-	*AMD*) m=amdsbwd ;;
-	*Intel*) m=ichwd ;;
-	*) return ;;
-	esac
-	/sbin/kldstat -q -m "${m}" || /sbin/kldload -n "${m}" 2>/dev/null
-	/sbin/sysctl -n "dev.${m}.0.%desc" 2>/dev/null
+	for m in amdsbwd ichwd; do
+		/sbin/kldstat -q -m "${m}" || /sbin/kldload -n "${m}" 2>/dev/null
+		d=$(/sbin/sysctl -n "dev.${m}.0.%desc" 2>/dev/null)
+		if [ -n "${d}" ]; then
+			echo "${d}"
+			return
+		fi
+	done
 }
 
 say() {

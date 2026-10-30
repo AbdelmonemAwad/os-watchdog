@@ -6,7 +6,7 @@
 """
 What the page shows, as one JSON object: whether the timer is armed and by whom, the timer itself,
 the timeout the running watchdogd asked for, the setting, and the last reset as reset_reason.py kept
-it at this boot.
+it at this boot - or that this host has no reset record at all, as reset_reason.py judges it.
 
     status.py
 
@@ -18,6 +18,13 @@ import json
 import os
 import re
 import subprocess
+import sys
+
+# The same judgement as the start hook's, from the same file beside this one: an AMD processor of
+# family 17h or later, not in a virtual machine (2026-10-29). Its directory is named rather than
+# assumed, so that python3 -I, which leaves it out of the path, finds it too.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import reset_reason                                                      # noqa: E402
 
 PIDFILE = '/var/run/os-watchdog.pid'
 PROJECT = '/usr/local/opnsense/scripts/xgs/watchdog.sh'
@@ -114,6 +121,9 @@ def main():
         'configured_timeout': int(setting('timeout', '128')),
         'project_enabled': project_setting() if os.path.exists(PROJECT) else None,
         'reset': reset(),
+        # False where the chipset keeps no record to read: the page says "not available" then,
+        # rather than "not recorded" and whatever an older record kept
+        'reset_supported': reset_reason.no_register() is None,
     }))
 
 
