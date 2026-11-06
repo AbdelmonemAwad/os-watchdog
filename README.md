@@ -42,7 +42,8 @@ Arms the hardware watchdog of the host, so a host that stops running is reset by
 ## What it does
 
 - arms the chipset's watchdog timer with watchdogd(8) at every boot, when the setting says so, and
-  disarms it at every shutdown, so turning the machine off stays off. ~~The timer's driver is chosen
+  disarms it at every shutdown, so turning the machine off stays off - after the slow stop hooks
+  since 1.0.2, so a host that stops in them is still reset. ~~The timer's driver is chosen
   by the processor: `amdsbwd` (the AMD FCH's timer) on AMD, `ichwd` on Intel;~~ The timer's driver is
   the first of `amdsbwd` (the AMD FCH's timer) and `ichwd` (Intel's ICH and PCH, and the ICH9 of
   qemu's q35 board) that attaches - since 2026-10-29: chosen by the processor, a virtual machine on
@@ -146,6 +147,37 @@ the address; nothing to read`. Not exercised there: an install keeping the reset
 kept to keep), the timer armed by whichever of amdsbwd and ichwd attaches (the 1.0.0 copy had armed
 it already), a record of all ones kept as none, and the removal of what a self-update left. The
 page's values without "the" and its reworded note were seen on the XGS 3300.
+
+1.0.2, before its release, on the first XGS 3300 (vendor version 23) and the XGS 136 (vendor
+version 21), 2026-11-06, OPNsense 26.7 with os-xgs-npu installed: the release branch installed by
+`install/install.sh` from its archive with a commit stamp, as the self-update installs a release.
+
+- **Stop hook's place.** With os-xgs-npu's watchdog set aside, as above, so this plugin held the
+  timer (128 s), and a stop hook put in between 21 and 24 that paused watchdogd (`kill -STOP`) and
+  slept 420 s, the appliance was restarted by `rc.reboot` - what the Reboot button and a firmware
+  update run. With 1.0.2 its timer reset it: no orderly shutdown on the console, the next boot's
+  loader 145 s after the restart began on the XGS 3300 (twice) and 155 s on the XGS 136, reset
+  reason bit 25, the hardware watchdog expired. With 1.0.1, `04-watchdog` disarmed the timer at the
+  first stop hook; the pause was sat out to its end and the appliance rebooted as usual, bit 19, on
+  both.
+- **`shutdown -r now` instead** runs the stop hooks under init, which ends them after
+  `kern.init_shutdown_timeout` (120 s): there the paused hook ended at 129 s with an orderly reboot,
+  bit 19, before the timer.
+- **Package.** Built on the XGS 3300 by `tools/make-package.sh` from 1.0.1 and 1.0.2: 1.0.2 by
+  `pkg add -f` over 1.0.1 - installed by `install/install.sh` or by its package - left `24-watchdog`
+  alone. Without the post-install of #12 it left `04-watchdog` beside it, both ways.
+- **Ordinary restarts** by `rc.reboot`, 1.0.1 and 1.0.2 in turn, os-xgs-npu holding the timer: the
+  stop hooks up to 80-freebsd took 2 s with either, `watchdog` after `kernelfollow` with 1.0.2; the
+  front ports back after a median 146 s on the XGS 3300 with both (3 runs each) and after 122 and
+  124 s on the XGS 136 (6 each, permutation p = 0.20) - no difference to tell.
+- **Soak.** With 1.0.2 and os-kernelfollow 1.0.3 installed, 20 restarts of the XGS 3300 and 22 of the XGS
+  136 by `rc.reboot` in an hour: every one an ordinary reboot (bit 19, the boot's own record), all
+  front ports back (12 and 14; medians 148 and 124 s), `watchdog` after `kernelfollow` every time,
+  the timer held by os-xgs-npu after each, and no line of either plugin in the system log.
+
+Not run for 1.0.2: a hang in the kernel itself during a stop hook (the paused watchdogd stands in for
+one); a halt or power-off (`shutdown -h`, `-p`), which was run for 1.0.0 only; a host with neither
+os-xgs-npu nor an XGS board.
 
 ## Installation
 
