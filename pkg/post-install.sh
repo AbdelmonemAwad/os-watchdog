@@ -12,6 +12,12 @@ if [ -f /usr/local/etc/rc.d/configd ]; then
 	/usr/local/etc/rc.d/configd restart
 fi
 
+# The stop hook was 04-watchdog until 2026-11-06, first of all; stop/24-watchdog says why it is not
+# any more. install/install.sh takes the old one away, and so does this: a host that had it from the
+# installer - by hand, by the self-update, from an image - and then takes this package keeps it,
+# because pkg(8) never knew the file, and it would still disarm the timer before the slow stop hooks.
+rm -f /usr/local/etc/rc.syshook.d/stop/04-watchdog
+
 # The reset record kept at each boot, made here first so it is never world-readable.
 install -d -o root -g wheel -m 0750 /var/db/os-watchdog
 

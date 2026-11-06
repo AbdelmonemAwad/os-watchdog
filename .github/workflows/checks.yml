@@ -94,6 +94,19 @@ jobs:
             sh -n "$f" && echo "ok $f"
           done
 
+      # Every file the installer lays down from src/ is one install/uninstall.sh takes away; and a
+      # stop hook renamed since a release is taken away by both installers - install/install.sh and
+      # the package's post-install, which pkg(8) runs - or a host that changes from one to the other
+      # keeps the old name beside the new (04-watchdog, 2026-11-06).
+      - name: What the installers lay down and take away
+        run: |
+          sh tools/check-uninstall.sh .
+          for old in /usr/local/etc/rc.syshook.d/stop/04-watchdog; do
+            grep -qF "rm -f ${old}" install/install.sh || { echo "install/install.sh leaves ${old}"; exit 1; }
+            grep -qF "rm -f ${old}" pkg/post-install.sh || { echo "pkg/post-install.sh leaves ${old}"; exit 1; }
+          done
+          echo "both installers take the stop hook's old name away"
+
   privacy:
     name: nothing private
     runs-on: ubuntu-latest
