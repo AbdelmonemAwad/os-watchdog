@@ -10,6 +10,13 @@ only shows it.
 Plugin Changelog
 ================
 
+1.0.2
+
+* host watchdog disarmed at shutdown after the slow stop hooks, not
+  first: a host that stops in them is reset by its timer
+* old stop hook, 04-watchdog, taken away by the package as by the
+  installer
+
 1.0.1
 
 * nothing read from the chipset in a virtual machine, and a record of all ones kept as none
