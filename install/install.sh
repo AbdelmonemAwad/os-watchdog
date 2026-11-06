@@ -16,7 +16,10 @@ find /usr/local/opnsense/scripts/watchdog -type f -name '*.py' -exec chmod 755 {
 chmod 755 /usr/local/opnsense/scripts/watchdog/watchdog.sh /usr/local/opnsense/scripts/watchdog/place-menu.sh
 chmod 644 /usr/local/opnsense/scripts/watchdog/i18n/ui/source.json
 chmod 755 /usr/local/etc/rc.syshook.d/start/07-watchdog-reset-reason \
-    /usr/local/etc/rc.syshook.d/start/10-watchdog /usr/local/etc/rc.syshook.d/stop/04-watchdog
+    /usr/local/etc/rc.syshook.d/start/10-watchdog /usr/local/etc/rc.syshook.d/stop/24-watchdog
+# The stop hook was 04-watchdog until 2026-11-06, first of all; that one goes, or it would still
+# disarm the timer before the slow stop hooks (24-watchdog says why).
+rm -f /usr/local/etc/rc.syshook.d/stop/04-watchdog
 chmod 644 /usr/local/opnsense/service/conf/actions.d/actions_watchdog.conf
 
 # syntax check before anything is reloaded

@@ -15,7 +15,8 @@ fi
 rm -rf /usr/local/share/os-watchdog
 rm -f /usr/local/etc/rc.syshook.d/start/07-watchdog-reset-reason
 rm -f /usr/local/etc/rc.syshook.d/start/10-watchdog
-rm -f /usr/local/etc/rc.syshook.d/stop/04-watchdog
+# the stop hook by both names: 24-watchdog, and 04-watchdog on an install from before 2026-11-06
+rm -f /usr/local/etc/rc.syshook.d/stop/24-watchdog /usr/local/etc/rc.syshook.d/stop/04-watchdog
 rm -f /usr/local/opnsense/service/conf/actions.d/actions_watchdog.conf
 rm -rf /usr/local/opnsense/scripts/watchdog
 # the menu file place-menu.sh wrote, which is not one of src/'s files
