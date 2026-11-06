@@ -16,9 +16,10 @@
 # running, a host that stops for longer than the timeout is reset by the hardware.
 #
 # HOW. watchdogd(8) pats the timer every second and asks for TIMEOUT seconds each time. It is started
-# from the boot's start hook and stopped first thing at shutdown, because watchdogd disarms the timer
-# only when it is asked to stop: a timer left armed through a halt would reset the machine a couple of
-# minutes after somebody asked it to power off.
+# from the boot's start hook and stopped at shutdown, because watchdogd disarms the timer only when it
+# is asked to stop: a timer left armed through a halt would reset the machine a couple of minutes after
+# somebody asked it to power off. Stopped by stop/24-watchdog, after the slow stop hooks - until
+# 2026-11-06 first thing, by 04-watchdog, which left a host that stopped in them unwatched.
 #
 # ONE WATCHDOG AT A TIME. os-xgs-npu has armed the timer itself since 2026-10-17
 # (scripts/xgs/watchdog.sh, its setting in XGS: Settings). While that script is installed this one

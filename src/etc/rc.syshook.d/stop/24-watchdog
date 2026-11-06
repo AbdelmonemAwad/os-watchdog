@@ -1,0 +1,19 @@
+#!/bin/sh
+#-
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Abdelmonem Awad <eg2@live.com>
+#
+# Disarm the host's hardware watchdog at shutdown: watchdogd disarms the timer only when asked to
+# stop, and one left armed through a halt would reset the machine after somebody asked it to power
+# off - scripts/watchdog/watchdog.sh.
+#
+# After the slow stop hooks, not before them. On an XGS appliance the reboot that brings a new kernel
+# rebuilds the coprocessor's driver for it - os-xgs-npu's 20-octep and os-kernelfollow's
+# 21-kernelfollow, up to ten minutes each - and a host that stops in that rebuild is reset only if
+# the timer is still armed. Until 2026-11-06 this was 04-watchdog, before anything else, so it never
+# was; os-xgs-npu's own 23-xgs-watchdog moved the same way that day. Still before 80-freebsd, which
+# stops the services.
+SCRIPT=/usr/local/opnsense/scripts/watchdog/watchdog.sh
+[ -f "${SCRIPT}" ] || exit 0
+/bin/sh "${SCRIPT}" stop > /dev/null 2>&1
+exit 0
