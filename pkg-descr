@@ -10,6 +10,13 @@ only shows it.
 Plugin Changelog
 ================
 
+1.0.2
+
+* stop/24-watchdog: the host's watchdog disarmed after the slow stop
+  hooks, not first
+* pkg/post-install.sh: the stop hook's old name taken away by the package
+  too, and CI holds both installers to it
+
 1.0.1
 
 * nothing read from the chipset in a virtual machine, and a record of all ones kept as none
