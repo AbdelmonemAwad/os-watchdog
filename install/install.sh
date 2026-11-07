@@ -11,7 +11,12 @@ set -e
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 
 # plugin files: src/ maps to /usr/local
+# The public keys a release must be signed with for self-update.py to install it (its
+# SIGNED RELEASES) are the set this tree holds and no other: the installed ones go first,
+# so a key the tree dropped goes with this install.
+rm -rf /usr/local/opnsense/scripts/watchdog/release-keys
 cp -R "${HERE}/src/" /usr/local/
+chmod 644 /usr/local/opnsense/scripts/watchdog/release-keys/*.pub
 find /usr/local/opnsense/scripts/watchdog -type f -name '*.py' -exec chmod 755 {} +
 chmod 755 /usr/local/opnsense/scripts/watchdog/watchdog.sh /usr/local/opnsense/scripts/watchdog/place-menu.sh
 chmod 644 /usr/local/opnsense/scripts/watchdog/i18n/ui/source.json
