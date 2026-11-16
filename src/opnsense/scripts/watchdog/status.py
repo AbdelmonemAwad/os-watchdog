@@ -12,6 +12,15 @@ it at this boot - or that this host has no reset record at all, as reset_reason.
 
 Read only: no driver is loaded and nothing is armed or disarmed here - watchdog.sh does that. A
 timer whose driver is not loaded yet is reported as not found; Apply loads it.
+
+Where os-xgs-npu is installed, also the coprocessor's own watchdog as os-xgs-npu sets it - what its
+fastpath.py does when the fast path stops answering its heartbeat (xgs.general.fastpath_restart in
+XGS: Settings): 1, the default, takes the coprocessor up again or restarts the appliance; 0 says so
+and nothing more; 2, 5 or 10 restarts the appliance after that many minutes. Read as fastpath.py
+reads it - the default where the configuration has no value, 0 for anything not one of the choices -
+and null without os-xgs-npu (2026-11-17).
+
+The paths can be named by WATCHDOG_* in the environment, for tools/test-watchdog.py.
 """
 
 import json
@@ -26,11 +35,16 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import reset_reason                                                      # noqa: E402
 
-PIDFILE = '/var/run/os-watchdog.pid'
-PROJECT = '/usr/local/opnsense/scripts/xgs/watchdog.sh'
-PROJECT_PIDFILE = '/var/run/xgs-watchdogd.pid'
-CONF = '/conf/config.xml'
-KEPT = '/var/db/os-watchdog/reset-reason.json'
+PIDFILE = os.environ.get('WATCHDOG_PIDFILE', '/var/run/os-watchdog.pid')
+XGS_SCRIPTS = os.environ.get('WATCHDOG_XGS_SCRIPTS', '/usr/local/opnsense/scripts/xgs')
+PROJECT = os.path.join(XGS_SCRIPTS, 'watchdog.sh')
+# os-xgs-npu's fast-path watchdog: present with os-xgs-npu, and what its setting governs
+FASTPATH = os.path.join(XGS_SCRIPTS, 'fastpath.py')
+FASTPATH_CHOICES = (0, 1, 2, 5, 10)
+FASTPATH_DEFAULT = 1
+PROJECT_PIDFILE = os.environ.get('WATCHDOG_PROJECT_PIDFILE', '/var/run/xgs-watchdogd.pid')
+CONF = os.environ.get('WATCHDOG_CONF', '/conf/config.xml')
+KEPT = os.environ.get('WATCHDOG_KEPT', '/var/db/os-watchdog/reset-reason.json')
 DRIVERS = ('amdsbwd', 'ichwd')
 
 
@@ -73,6 +87,24 @@ def project_setting():
     section = re.search(r'<XGS[ >].*?</XGS>', text, re.S)
     found = section and re.search(r'<watchdog>([01])</watchdog>', section.group(0))
     return (found.group(1) if found else '1') == '1'
+
+
+def fastpath_restart():
+    """os-xgs-npu's xgs.general.fastpath_restart, as its fastpath.py reads it: the default where the
+    configuration has none, 0 for anything that is not one of the choices; None without os-xgs-npu."""
+    if not os.path.exists(FASTPATH):
+        return None
+    try:
+        with open(CONF, encoding='utf-8', errors='replace') as handle:
+            text = handle.read()
+    except OSError:
+        return FASTPATH_DEFAULT
+    section = re.search(r'<XGS[ >].*?</XGS>', text, re.S)
+    found = section and re.search(r'<fastpath_restart>([^<]*)</fastpath_restart>', section.group(0))
+    raw = found.group(1).strip() if found else ''
+    if raw == '':
+        return FASTPATH_DEFAULT
+    return int(raw) if raw.isdigit() and int(raw) in FASTPATH_CHOICES else 0
 
 
 def timeout_of(pid):
@@ -120,6 +152,8 @@ def main():
         'enabled': setting('enabled', '1') == '1',
         'configured_timeout': int(setting('timeout', '128')),
         'project_enabled': project_setting() if os.path.exists(PROJECT) else None,
+        # os-xgs-npu's coprocessor watchdog, read only here: null without os-xgs-npu
+        'fastpath_restart': fastpath_restart(),
         'reset': reset(),
         # False where the chipset keeps no record to read: the page says "not available" then,
         # rather than "not recorded" and whatever an older record kept

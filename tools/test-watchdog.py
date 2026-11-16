@@ -5,7 +5,10 @@
 
   * reset_reason.py boot - the "watchdog" field of every record it keeps (true with bit 25, false
     with a value read without it, null with nothing read), and its line in the system log when true,
-    whether it read the register itself (a file stands in for it) or took os-xgs-npu's record.
+    whether it read the register itself (a file stands in for it) or took os-xgs-npu's record;
+  * status.py - os-xgs-npu's coprocessor watchdog (xgs.general.fastpath_restart) as the page shows
+    it: null without os-xgs-npu, its default 1 where the configuration has none, each choice as set,
+    0 for a value that is not one, and the page's line for each.
 
 POSIX only (os.pread, as on the firewall): run it on Linux or FreeBSD, or under WSL.
 
@@ -149,6 +152,64 @@ chipset(0)
 project({'boot': BOOT - 86400, 'value': '0x02000800', 'read_by': 'os-xgs-npu'})
 rr.at_boot()
 check("os-xgs-npu's record of another boot: watchdog null", kept().get('watchdog'), None)
+
+# ---------------------------------------------------------------- 2. the coprocessor's watchdog (svc-5-08)
+
+CONF = os.path.join(TOP, 'config.xml')
+XGS = os.path.join(TOP, 'xgs-scripts')
+os.environ.update({'WATCHDOG_CONF': CONF, 'WATCHDOG_XGS_SCRIPTS': XGS,
+                   'WATCHDOG_PIDFILE': os.path.join(TOP, 'os-watchdog.pid'),
+                   'WATCHDOG_PROJECT_PIDFILE': os.path.join(TOP, 'xgs-watchdogd.pid'), 'WATCHDOG_KEPT': KEPT})
+st = load('status')
+
+
+def config(xgs=None, watchdog=None):
+    """A config.xml with os-xgs-npu's general section (xgs: its inner XML) and os-watchdog's."""
+    with open(CONF, 'w', encoding='utf-8') as handle:
+        handle.write('<?xml version="1.0"?>\n<opnsense><system><hostname>fw</hostname></system><OPNsense>')
+        if xgs is not None:
+            handle.write('<XGS version="1.0.0"><general>%s</general></XGS>' % xgs)
+        if watchdog is not None:
+            handle.write('<Watchdog version="1.0.0">%s</Watchdog>' % watchdog)
+        handle.write('</OPNsense></opnsense>\n')
+
+
+def xgs_installed(yes):
+    os.makedirs(XGS, exist_ok=True)
+    path = os.path.join(XGS, 'fastpath.py')
+    if yes:
+        open(path, 'w', encoding='utf-8').close()
+    elif os.path.exists(path):
+        os.remove(path)
+
+
+xgs_installed(False)
+config('<fastpath_restart>1</fastpath_restart>')
+check('without os-xgs-npu: no coprocessor line (null)', st.fastpath_restart(), None)
+xgs_installed(True)
+config('<watchdog>1</watchdog>')
+check('os-xgs-npu, page never saved: its default, 1', st.fastpath_restart(), 1)
+config(None)
+check('os-xgs-npu, no XGS section: its default, 1', st.fastpath_restart(), 1)
+config('<fastpath_restart></fastpath_restart>')
+check('os-xgs-npu, empty value: its default, 1', st.fastpath_restart(), 1)
+for value in (0, 1, 2, 5, 10):
+    config('<watchdog>1</watchdog><fastpath_restart>%d</fastpath_restart>' % value)
+    check('os-xgs-npu, fastpath_restart %d: shown as %d' % (value, value), st.fastpath_restart(), value)
+config('<fastpath_restart>7</fastpath_restart>')
+check('os-xgs-npu, a value that is not a choice: 0, as fastpath.py takes it', st.fastpath_restart(), 0)
+config(None, '<fastpath_restart>2</fastpath_restart>')
+check("another section's element of the same name is not os-xgs-npu's", st.fastpath_restart(), 1)
+
+VOLT = os.path.join(ROOT, 'src', 'opnsense', 'mvc', 'app', 'views', 'OPNsense', 'Watchdog', 'index.volt')
+with open(VOLT, encoding='utf-8') as handle:
+    volt = handle.read()
+for value, words in ((0, 'Say so, and nothing more'), (1, 'Take it up again, or restart'),
+                     (2, 'Restart the appliance after 2 minutes'), (5, 'Restart the appliance after 5 minutes'),
+                     (10, 'Restart the appliance after 10 minutes')):
+    check('the page words choice %d as XGS: Settings does' % value,
+          ('%d: "{{ lang._(\'%s\') }}"' % (value, words)) in volt, True)
+check('the page links to XGS: Settings', 'href="/ui/xgs/settings"' in volt, True)
 
 shutil.rmtree(TOP, ignore_errors=True)
 print('%d failure(s)' % failures)

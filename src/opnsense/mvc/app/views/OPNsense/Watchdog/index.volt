@@ -3,7 +3,8 @@
  # Copyright (c) 2026 Abdelmonem Awad <eg2@live.com>
  #
  # System: Hardware Watchdog (XGS: Hardware Watchdog when os-xgs-npu is installed) - the timer, who
- # holds it, the last reset, and the two settings.
+ # holds it, the last reset, and the two settings - and, where os-xgs-npu is installed, its
+ # coprocessor watchdog, read only.
  #}
 
 <style>
@@ -155,6 +156,25 @@
             $('#wd-project').toggle(project && data.project_enabled !== false);
             $('#wd-project-off').toggle(project && data.project_enabled === false);
 
+            /* os-xgs-npu's coprocessor watchdog - what it does when the fast path stops answering,
+               xgs.general.fastpath_restart - read only, in the words of its own setting; set in XGS:
+               Settings. Nothing without os-xgs-npu (null). */
+            const fastpath = {
+                0: "{{ lang._('Say so, and nothing more') }}",
+                1: "{{ lang._('Take it up again, or restart') }}",
+                2: "{{ lang._('Restart the appliance after 2 minutes') }}",
+                5: "{{ lang._('Restart the appliance after 5 minutes') }}",
+                10: "{{ lang._('Restart the appliance after 10 minutes') }}"
+            };
+            const fp = data.fastpath_restart;
+            const has_fp = fp !== null && fp !== undefined && fastpath[fp] !== undefined;
+            $('#wd-fastpath').toggle(has_fp);
+            if (has_fp) {
+                $('#wd-fastpath-state').text(plain(fp ? "{{ lang._('on') }}" : "{{ lang._('off') }}"))
+                    .toggleClass('text-success', fp !== 0);
+                $('#wd-fastpath-choice').text(plain(fastpath[fp]));
+            }
+
             const $rows = $('#wd-bits tbody').empty();
             const bits = reset && reset.bits ? reset.bits : [];
             bits.forEach(function (b) {
@@ -219,6 +239,15 @@
     <span id="wd-project-off" class="text-muted" style="display: none;">
         {{ lang._('os-xgs-npu has its watchdog switched off in XGS: Settings. While its watchdog script is installed this plugin does not arm the timer either, so nothing arms it; the settings below take over once that script is removed.') }}
     </span>
+    <div id="wd-fastpath" style="display: none; margin-top: 6px;">
+        <i class="fa fa-fw fa-microchip text-muted"></i>
+        <strong>{{ lang._('Coprocessor watchdog') }}</strong>: <span id="wd-fastpath-state"></span>
+        &middot; {{ lang._('When the fast path stops') }}: <span id="wd-fastpath-choice"></span>
+        &middot; <a href="/ui/xgs/settings">{{ lang._('XGS: Settings') }}</a>
+        <div class="text-muted">
+            {{ lang._('os-xgs-npu watches the fast path of the coprocessor and, when it stops answering, does what its setting says. It is set in XGS: Settings; this page only shows it.') }}
+        </div>
+    </div>
 </div>
 
 <ul class="nav nav-tabs" data-tabs="tabs" id="maintabs">

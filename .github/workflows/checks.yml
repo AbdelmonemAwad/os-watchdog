@@ -45,8 +45,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # reset_reason.py's record (its "watchdog" field and log line) against files in a temporary
-      # directory standing in for the chipset and for os-xgs-npu.
+      # reset_reason.py's record (its "watchdog" field and log line) and status.py's coprocessor line,
+      # against files in a temporary directory standing in for the chipset, config.xml and os-xgs-npu.
       - name: The scripts against files standing in for the host
         run: python3 tools/test-watchdog.py
 

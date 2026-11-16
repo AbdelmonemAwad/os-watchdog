@@ -83,6 +83,12 @@ aside while they are installed:
 
 When os-xgs-npu stops doing either is its owner's decision; nothing here changes it.
 
+The page also shows, read only, os-xgs-npu's watchdog of its coprocessor - what os-xgs-npu does when
+the fast path stops answering its heartbeat, its setting **When the fast path stops** in XGS: Settings
+(`xgs.general.fastpath_restart`: on, taking the coprocessor up again or restarting the appliance,
+by default; or restarting after 2, 5 or 10 minutes; off, saying so and nothing more) - with a link to
+XGS: Settings, where it is changed. Nothing of it where os-xgs-npu is not installed (since 2026-11-17).
+
 ## What is tested
 
 On the second XGS 3300, 2026-10-22, from a copy in `/tmp`, nothing installed:
