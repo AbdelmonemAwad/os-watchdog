@@ -31,12 +31,15 @@
 # Never fails the caller: a host without a timer, the setting off, or the timer held elsewhere is
 # reported and exits 0.
 
-PIDFILE=/var/run/os-watchdog.pid
-PROJECT=/usr/local/opnsense/scripts/xgs/watchdog.sh
-CONF=/conf/config.xml
+# The paths can be named by WATCHDOG_* in the environment, for tools/test-watchdog.py, which runs only
+# "status" (reads, never arms).
+PIDFILE=${WATCHDOG_PIDFILE:-/var/run/os-watchdog.pid}
+PROJECT=${WATCHDOG_PROJECT:-/usr/local/opnsense/scripts/xgs/watchdog.sh}
+CONF=${WATCHDOG_CONF:-/conf/config.xml}
 
 # The plugin's settings, by element name, out of its section of config.xml; the model's defaults when
-# the page was never saved.
+# the page was never saved - so a config.xml with no Watchdog section at all arms the timer (on by
+# default, as Watchdog.xml's <Default>; tools/test-watchdog.py holds both to it).
 setting() {
 	/usr/bin/sed -n "/<Watchdog[ >]/,/<\/Watchdog>/s:.*<$1>\([0-9]*\)</$1>.*:\1:p" "${CONF}" 2>/dev/null | /usr/bin/head -1
 }

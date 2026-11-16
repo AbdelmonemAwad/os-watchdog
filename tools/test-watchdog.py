@@ -8,7 +8,10 @@
     whether it read the register itself (a file stands in for it) or took os-xgs-npu's record;
   * status.py - os-xgs-npu's coprocessor watchdog (xgs.general.fastpath_restart) as the page shows
     it: null without os-xgs-npu, its default 1 where the configuration has none, each choice as set,
-    0 for a value that is not one, and the page's line for each.
+    0 for a value that is not one, and the page's line for each;
+  * on by default: Watchdog.xml's defaults, and a config.xml with no Watchdog section (or none at
+    all) taken as on by status.py and by watchdog.sh, whose "status" alone runs here (it reads and
+    never arms); off only where the section says 0.
 
 POSIX only (os.pread, as on the firewall): run it on Linux or FreeBSD, or under WSL.
 
@@ -17,8 +20,10 @@ import importlib.util
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
+import xml.etree.ElementTree as ET
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -210,6 +215,44 @@ for value, words in ((0, 'Say so, and nothing more'), (1, 'Take it up again, or 
     check('the page words choice %d as XGS: Settings does' % value,
           ('%d: "{{ lang._(\'%s\') }}"' % (value, words)) in volt, True)
 check('the page links to XGS: Settings', 'href="/ui/xgs/settings"' in volt, True)
+
+# ---------------------------------------------------------------- 3. on by default (svc-5-08)
+# A config.xml with no Watchdog section - a box that never saved the page - arms the timer: the
+# model's default, and the decision of both scripts that read config.xml by element name. Only
+# watchdog.sh's "status" runs here, which reads and never arms.
+
+MODEL = os.path.join(ROOT, 'src', 'opnsense', 'mvc', 'app', 'models', 'OPNsense', 'Watchdog', 'Watchdog.xml')
+model = ET.parse(MODEL).getroot()
+check('Watchdog.xml: enabled defaults to 1', model.findtext('items/general/enabled/Default'), '1')
+check('Watchdog.xml: timeout defaults to 128', model.findtext('items/general/timeout/Default'), '128')
+
+SH = shutil.which('sh')
+WATCHDOG_SH = os.path.join(SCRIPTS, 'watchdog.sh')
+
+
+def sh_status():
+    env = dict(os.environ, WATCHDOG_CONF=CONF, WATCHDOG_PIDFILE=os.path.join(TOP, 'os-watchdog.pid'),
+               WATCHDOG_PROJECT=os.path.join(TOP, 'no-os-xgs-npu', 'watchdog.sh'))
+    return subprocess.run([SH, WATCHDOG_SH, 'status'], capture_output=True, text=True, env=env,
+                          timeout=30).stdout.strip()
+
+
+xgs_installed(False)
+for name, xgs, ours, armed in (
+        ('no Watchdog section', '<watchdog>1</watchdog>', None, True),
+        ('a Watchdog section without enabled', None, '<general><timeout>128</timeout></general>', True),
+        ("another plugin's enabled 0, no Watchdog section", '<enabled>0</enabled>', None, True),
+        ('enabled 1', None, '<general><enabled>1</enabled><timeout>64</timeout></general>', True),
+        ('enabled 0', None, '<general><enabled>0</enabled><timeout>128</timeout></general>', False)):
+    config(xgs, ours)
+    check('status.py, %s: %s' % (name, 'on' if armed else 'off'), st.setting('enabled', '1') == '1', armed)
+    check('watchdog.sh, %s: %s' % (name, 'on' if armed else 'off'), sh_status(),
+          'not armed (on in the settings)' if armed else 'not armed (off in the settings)')
+os.remove(CONF)
+check('status.py, no config.xml at all: on', st.setting('enabled', '1') == '1', True)
+check('watchdog.sh, no config.xml at all: on', sh_status(), 'not armed (on in the settings)')
+config('<watchdog>1</watchdog>')
+check('status.py, no Watchdog section: timeout 128', int(st.setting('timeout', '128')), 128)
 
 shutil.rmtree(TOP, ignore_errors=True)
 print('%d failure(s)' % failures)

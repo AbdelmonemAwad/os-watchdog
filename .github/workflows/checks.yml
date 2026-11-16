@@ -45,7 +45,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # reset_reason.py's record (its "watchdog" field and log line) and status.py's coprocessor line,
+      # reset_reason.py's record (its "watchdog" field and log line), status.py's coprocessor line, and
+      # the timer on by default (the model, status.py and watchdog.sh's status with no Watchdog section),
       # against files in a temporary directory standing in for the chipset, config.xml and os-xgs-npu.
       - name: The scripts against files standing in for the host
         run: python3 tools/test-watchdog.py
