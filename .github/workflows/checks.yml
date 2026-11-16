@@ -39,6 +39,17 @@ jobs:
       - name: self-update.py takes a release only as signed
         run: python3 tools/test-self-update.py
 
+  scripts:
+    name: scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # reset_reason.py's record (its "watchdog" field and log line) against files in a temporary
+      # directory standing in for the chipset and for os-xgs-npu.
+      - name: The scripts against files standing in for the host
+        run: python3 tools/test-watchdog.py
+
   syntax:
     name: syntax
     runs-on: ubuntu-latest

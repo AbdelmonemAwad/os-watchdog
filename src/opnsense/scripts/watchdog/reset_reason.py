@@ -44,6 +44,13 @@ whatever the hypervisor answers, and writing it back writes to an address nobody
 2026-10-29 nothing is read where kern.vm_guest is anything but "none", and a value with every bit set
 - what a read returns where nothing answers, never 32 causes at once - is taken as no record, and
 nothing is written back. Never fails the caller.
+
+A RESET THE WATCHDOG CAUSED, IN ONE FIELD. Every record kept carries "watchdog": true when bit 25 -
+the hardware watchdog expired - is set in the value, false when the register was read and it is not,
+and null when nothing could be read (os-xgs-npu kept no record for this boot). os-netreport's alert
+reads this field, so it need not know the chipset's bit numbers; a record kept by a version before
+this field has none, and is read by its bits instead. When it is true a line of its own goes into the
+system log: "the hardware watchdog reset this host" with the boot it belongs to (2026-11-17).
 """
 
 import json
@@ -66,6 +73,8 @@ PROJECT_KEPT = os.environ.get('XGS_RESET_PROJECT_STATE', '/var/db/os-xgs-npu/res
 VM_GUEST = os.environ.get('XGS_RESET_VM_GUEST')
 # what a read returns where nothing answers
 NOTHING_ANSWERS = 0xFFFFFFFF
+# AMD's bit for "the hardware watchdog expired"
+WATCHDOG_BIT = 25
 
 # The bits with a published meaning (the AMD list Linux carries); every other bit is printed by its
 # number. Bit 19 is what an ordinary reboot leaves here (the XGS 3300, 2026-10-18).
@@ -104,6 +113,27 @@ def describe(value):
     if not bits:
         return '0x%08x - no cause recorded' % value
     return '0x%08x - %s' % (value, '; '.join('bit %d: %s' % (b['bit'], b['reason']) for b in bits))
+
+
+def by_watchdog(value):
+    """The record's "watchdog" field: True when the hardware watchdog's bit is set in the value read,
+    False when a value was read without it, None when nothing was read. The value as a number, or as
+    the record keeps it ("0x02000800")."""
+    if value is None or value == '':
+        return None
+    try:
+        number = value if isinstance(value, int) else int(str(value), 16)
+    except ValueError:
+        return None
+    return bool(number >> WATCHDOG_BIT & 1)
+
+
+def said_by_watchdog(record):
+    """The line in the system log for a record that says the hardware watchdog reset the host."""
+    if record.get('watchdog') is True:
+        log('the hardware watchdog reset this host: the reset before the boot of %s, read by %s' % (
+            time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime(int(record.get('boot') or 0))),
+            record.get('read_by') or 'os-watchdog'))
 
 
 def vm_guest():
@@ -180,12 +210,13 @@ def from_project(boot):
     and leave the register alone."""
     record = kept_now(PROJECT_KEPT)
     if not this_boot(record, boot):
-        keep({'boot': boot, 'read_at': int(time.time()), 'value': None, 'bits': [],
+        keep({'boot': boot, 'read_at': int(time.time()), 'value': None, 'bits': [], 'watchdog': None,
               'read_by': 'os-xgs-npu', 'note': 'os-xgs-npu reads the record on this host and kept none for this boot'})
         print('os-xgs-npu reads the record on this host and kept none for this boot')
         return 0
-    record = dict(record, read_by='os-xgs-npu')
+    record = dict(record, read_by='os-xgs-npu', watchdog=by_watchdog(record.get('value')))
     keep(record)
+    said_by_watchdog(record)
     print('last reset, as os-xgs-npu read it: ' + describe(int(record.get('value') or '0', 16)))
     return 0
 
@@ -238,8 +269,10 @@ def at_boot():
         'boot': boot, 'read_at': int(time.time()), 'value': '0x%08x' % value,
         'bits': decode(value), 'cleared': cleared,
         'after': None if after is None else '0x%08x' % after, 'read_by': 'os-watchdog',
+        'watchdog': by_watchdog(value),
     }
     keep(record)
+    said_by_watchdog(record)
     message = 'last reset: ' + describe(value)
     if value and not cleared:
         message += ' (could not be cleared)'

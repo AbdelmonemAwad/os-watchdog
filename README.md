@@ -52,7 +52,11 @@ Arms the hardware watchdog of the host, so a host that stops running is reset by
   FCH's `S5_RESET_STATUS` register, one bit for each cause - keeps it, and clears it for the next boot;
   on the machine itself only: not in a virtual machine, where the processor can be a Ryzen or an EPYC
   with no chipset behind the register's address, and never a value with every bit set, which is what
-  a read returns where nothing answers - neither is kept or written back (since 2026-10-29);
+  a read returns where nothing answers - neither is kept or written back (since 2026-10-29); every
+  record kept says in one field, `"watchdog"`, whether the hardware watchdog caused the reset - true
+  with bit 25, false with a value read without it, null when nothing was read - and a reset it
+  caused is written in the system log as such (since 2026-11-17; os-netreport's alert reads the
+  field);
 - **System: Hardware Watchdog** (XGS: Hardware Watchdog when os-xgs-npu is installed): whether the
   timer is armed and by whom, the timer, the last restart with each bit it set, and two settings -
   on or off, and the timeout (64, 128 or 256 seconds).
