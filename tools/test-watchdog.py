@@ -405,7 +405,7 @@ check('boots: no tag, nothing to tell this boot by', (rr.boots(QUIET_BOOT[len(TA
 def intel(kmsg, earlier=None, dmesg_boot=None, guest='none', tag=TAG):
     """An Intel host: what dmesg prints (kmsg), the record kept before (earlier), dmesg.boot - as rc
     wrote it early in this boot, before the start hooks: by default kmsg without this boot's lines from
-    ichwd - kern.vm_guest and kern.boot_tag. Nothing kept yet, no line logged."""
+    ichwd - kern.vm_guest and kern.boot_tag. No record of this boot yet, no line logged."""
     rr.DMESG, rr.KMSG, rr.VM_GUEST, rr.BOOT_TAG = INTEL_DMESG, KMSG, guest, tag
     if dmesg_boot is None:
         head, _, this = kmsg.rpartition(TAG)
