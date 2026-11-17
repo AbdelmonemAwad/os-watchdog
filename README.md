@@ -83,11 +83,14 @@ aside while they are installed:
 
 When os-xgs-npu stops doing either is its owner's decision; nothing here changes it.
 
-The page also shows, read only, os-xgs-npu's watchdog of its coprocessor - what os-xgs-npu does when
-the fast path stops answering its heartbeat, its setting **When the fast path stops** in XGS: Settings
-(`xgs.general.fastpath_restart`: on, taking the coprocessor up again or restarting the appliance,
-by default; or restarting after 2, 5 or 10 minutes; off, saying so and nothing more) - with a link to
-XGS: Settings, where it is changed. Nothing of it where os-xgs-npu is not installed (since 2026-11-17).
+The page also shows, read only, os-xgs-npu's setting **When the fast path stops** in XGS: Settings
+(`xgs.general.fastpath_restart`) - what os-xgs-npu does when the coprocessor's fast path stops
+answering its heartbeat: take the coprocessor up again, or restart the appliance, by default; restart
+it after 2, 5 or 10 minutes; or say so and nothing more - in the words of its choices, as os-xgs-npu's
+own fastpath.py shows it, and that the setting has nothing to watch on a host with no heartbeat; with
+a link to XGS: Settings, where it is changed. It is not the coprocessor's own hardware watchdog, which
+os-xgs-npu keeps fed whatever this says. Nothing of it where os-xgs-npu is not installed (since
+2026-11-17).
 
 ## What is tested
 

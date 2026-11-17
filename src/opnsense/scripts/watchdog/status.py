@@ -13,12 +13,13 @@ it at this boot - or that this host has no reset record at all, as reset_reason.
 Read only: no driver is loaded and nothing is armed or disarmed here - watchdog.sh does that. A
 timer whose driver is not loaded yet is reported as not found; Apply loads it.
 
-Where os-xgs-npu is installed, also the coprocessor's own watchdog as os-xgs-npu sets it - what its
-fastpath.py does when the fast path stops answering its heartbeat (xgs.general.fastpath_restart in
-XGS: Settings): 1, the default, takes the coprocessor up again or restarts the appliance; 0 says so
-and nothing more; 2, 5 or 10 restarts the appliance after that many minutes. Read as fastpath.py
-reads it - the default where the configuration has no value, 0 for anything not one of the choices -
-and null without os-xgs-npu (2026-11-17).
+Where os-xgs-npu is installed, also its setting When the fast path stops (xgs.general.fastpath_restart
+in XGS: Settings) - what its fastpath.py does when the coprocessor's fast path stops answering its
+heartbeat: 1, its default, takes the coprocessor up again or restarts the appliance; 0 says so and
+nothing more; 2, 5 or 10 restarts the appliance after that many minutes - as fastpath.py itself says
+it (its "show": its own default and reading, whatever its version), and whether this host has a
+heartbeat for it to watch. Where fastpath.py does not answer, the setting read from config.xml as it
+reads it, the heartbeat unknown. Both null without os-xgs-npu (2026-11-17).
 
 The paths can be named by WATCHDOG_* in the environment, for tools/test-watchdog.py.
 """
@@ -89,11 +90,25 @@ def project_setting():
     return (found.group(1) if found else '1') == '1'
 
 
-def fastpath_restart():
-    """os-xgs-npu's xgs.general.fastpath_restart, as its fastpath.py reads it: the default where the
-    configuration has none, 0 for anything that is not one of the choices; None without os-xgs-npu."""
+def fastpath():
+    """(os-xgs-npu's xgs.general.fastpath_restart, whether this host has a heartbeat for it): as its
+    fastpath.py shows them, or the setting from config.xml and None where it does not answer; (None,
+    None) without os-xgs-npu."""
     if not os.path.exists(FASTPATH):
-        return None
+        return None, None
+    try:
+        shown = json.loads(run([sys.executable, FASTPATH, 'show']) or 'null')
+        minutes = int(shown['setting'])
+        if minutes in FASTPATH_CHOICES:
+            return minutes, shown.get('heartbeat') is not None
+    except (ValueError, KeyError, TypeError):
+        pass
+    return fastpath_setting(), None
+
+
+def fastpath_setting():
+    """xgs.general.fastpath_restart as fastpath.py reads it: the default where the configuration has
+    none, 0 for anything that is not one of the choices."""
     try:
         with open(CONF, encoding='utf-8', errors='replace') as handle:
             text = handle.read()
@@ -104,7 +119,11 @@ def fastpath_restart():
     raw = found.group(1).strip() if found else ''
     if raw == '':
         return FASTPATH_DEFAULT
-    return int(raw) if raw.isdigit() and int(raw) in FASTPATH_CHOICES else 0
+    try:
+        minutes = int(raw)
+    except ValueError:
+        return 0
+    return minutes if minutes in FASTPATH_CHOICES else 0
 
 
 def timeout_of(pid):
@@ -131,6 +150,7 @@ def reset():
 
 
 def main():
+    restart, heartbeat = fastpath()
     ours = alive(PIDFILE)
     theirs = alive(PROJECT_PIDFILE) if os.path.exists(PROJECT) else None
     others = [int(p) for p in run(['/bin/pgrep', '-x', 'watchdogd']).split() if p.isdigit()]
@@ -152,8 +172,10 @@ def main():
         'enabled': setting('enabled', '1') == '1',
         'configured_timeout': int(setting('timeout', '128')),
         'project_enabled': project_setting() if os.path.exists(PROJECT) else None,
-        # os-xgs-npu's coprocessor watchdog, read only here: null without os-xgs-npu
-        'fastpath_restart': fastpath_restart(),
+        # os-xgs-npu's When the fast path stops, read only here, and whether this host has a heartbeat
+        # for it: null without os-xgs-npu
+        'fastpath_restart': restart,
+        'fastpath_heartbeat': heartbeat,
         'reset': reset(),
         # False where the chipset keeps no record to read: the page says "not available" then,
         # rather than "not recorded" and whatever an older record kept

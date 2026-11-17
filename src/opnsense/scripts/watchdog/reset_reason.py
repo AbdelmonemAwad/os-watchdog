@@ -46,11 +46,17 @@ whatever the hypervisor answers, and writing it back writes to an address nobody
 nothing is written back. Never fails the caller.
 
 A RESET THE WATCHDOG CAUSED, IN ONE FIELD. Every record kept carries "watchdog": true when bit 25 -
-the hardware watchdog expired - is set in the value, false when the register was read and it is not,
-and null when nothing could be read (os-xgs-npu kept no record for this boot). os-netreport's alert
-reads this field, so it need not know the chipset's bit numbers; a record kept by a version before
-this field has none, and is read by its bits instead. When it is true a line of its own goes into the
-system log: "the hardware watchdog reset this host" with the boot it belongs to (2026-11-17).
+the hardware watchdog expired - is set in the value and was not set before this boot, false when the
+register was read and the bit is not set, and null when that cannot be told: nothing was read (os-xgs-
+npu kept no record for this boot, or every bit is set - nothing answers), or bit 25 may be one an
+earlier boot left. The bits are write-one-to-clear and every read clears them, so a bit the boot before
+cleared is new; but where there is no record of the boot before (a first boot of this plugin, after the
+installer or another system), where that boot read nothing, could not clear it (cleared false), or
+still read it set after clearing (after), a set bit 25 may be old: null, not a reset to report. So
+false says only that the bit is not set. os-netreport's alert reads this field, so it need not know the
+chipset's bit numbers; a record kept by a version before this field has none, and is read by its bits
+instead. When it is true a line of its own goes into the system log: "the hardware watchdog reset this
+host" with the boot it belongs to (2026-11-17).
 """
 
 import json
@@ -75,6 +81,10 @@ VM_GUEST = os.environ.get('XGS_RESET_VM_GUEST')
 NOTHING_ANSWERS = 0xFFFFFFFF
 # AMD's bit for "the hardware watchdog expired"
 WATCHDOG_BIT = 25
+# os-xgs-npu's mark of its read in the kernel's environment (its read_at): every boot starts anew from
+# the loader, and no step of the clock moves it
+KENV = os.environ.get('XGS_RESET_KENV', '/bin/kenv')
+PROJECT_MARK = 'xgs.reset_reason.read_at'
 
 # The bits with a published meaning (the AMD list Linux carries); every other bit is printed by its
 # number. Bit 19 is what an ordinary reboot leaves here (the XGS 3300, 2026-10-18).
@@ -116,16 +126,35 @@ def describe(value):
 
 
 def by_watchdog(value):
-    """The record's "watchdog" field: True when the hardware watchdog's bit is set in the value read,
-    False when a value was read without it, None when nothing was read. The value as a number, or as
-    the record keeps it ("0x02000800")."""
+    """Whether the hardware watchdog's bit is set in a value read: True, False, or None when nothing
+    was read - no value, or every bit set (nothing answers). The value as a number, or as the record
+    keeps it ("0x02000800")."""
     if value is None or value == '':
         return None
     try:
         number = value if isinstance(value, int) else int(str(value), 16)
     except ValueError:
         return None
+    if number == NOTHING_ANSWERS:
+        return None
     return bool(number >> WATCHDOG_BIT & 1)
+
+
+def watchdog_field(value, earlier):
+    """The record's "watchdog" field for this boot's value, against the record of the boot before
+    (earlier, {} where there is none): by_watchdog(), but None where a set bit 25 may be one an earlier
+    boot left - no earlier record or one that read nothing, one that could not clear its bit 25, or
+    one that still read it set after clearing."""
+    said = by_watchdog(value)
+    if said is not True:
+        return said
+    if not earlier.get('boot') or by_watchdog(earlier.get('value')) is None:
+        return None
+    if earlier.get('cleared') is False and by_watchdog(earlier.get('value')):
+        return None
+    if by_watchdog(earlier.get('after')):
+        return None
+    return True
 
 
 def said_by_watchdog(record):
@@ -187,6 +216,10 @@ def keep(record):
         os.makedirs(os.path.dirname(KEPT), exist_ok=True)
         with open(KEPT + '.new', 'w', encoding='utf-8') as handle:
             json.dump(record, handle, indent=1)
+            # on disk before it replaces the old: a reset soon after this boot hook must not leave an
+            # empty record
+            handle.flush()
+            os.fsync(handle.fileno())
         os.replace(KEPT + '.new', KEPT)
     except OSError:
         pass
@@ -205,16 +238,29 @@ def this_boot(record, boot):
     return bool(boot) and abs(int(record.get('boot') or 0) - boot) <= 5
 
 
+def project_mark():
+    """os-xgs-npu's mark of its read at this boot (its record's read_at), or None."""
+    try:
+        out = subprocess.run([KENV, '-q', PROJECT_MARK], capture_output=True, text=True, timeout=10).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out or None
+
+
 def from_project(boot):
     """os-xgs-npu read the register at this boot (or will have, by its own hook): keep its record,
-    and leave the register alone."""
+    and leave the register alone. Its record is this boot's where its mark in the kernel's environment
+    names its read_at, or, without a mark, where its boot is kern.boottime within five seconds (a step
+    of the clock between the two boot hooks moves kern.boottime, never the mark)."""
+    earlier = kept_now()
     record = kept_now(PROJECT_KEPT)
-    if not this_boot(record, boot):
+    mark = project_mark()
+    if not (mark == str(record.get('read_at')) if mark is not None else this_boot(record, boot)):
         keep({'boot': boot, 'read_at': int(time.time()), 'value': None, 'bits': [], 'watchdog': None,
               'read_by': 'os-xgs-npu', 'note': 'os-xgs-npu reads the record on this host and kept none for this boot'})
         print('os-xgs-npu reads the record on this host and kept none for this boot')
         return 0
-    record = dict(record, read_by='os-xgs-npu', watchdog=by_watchdog(record.get('value')))
+    record = dict(record, read_by='os-xgs-npu', watchdog=watchdog_field(record.get('value'), earlier))
     keep(record)
     said_by_watchdog(record)
     print('last reset, as os-xgs-npu read it: ' + describe(int(record.get('value') or '0', 16)))
@@ -269,7 +315,7 @@ def at_boot():
         'boot': boot, 'read_at': int(time.time()), 'value': '0x%08x' % value,
         'bits': decode(value), 'cleared': cleared,
         'after': None if after is None else '0x%08x' % after, 'read_by': 'os-watchdog',
-        'watchdog': by_watchdog(value),
+        'watchdog': watchdog_field(value, earlier if not this_boot(earlier, boot) else {}),
     }
     keep(record)
     said_by_watchdog(record)

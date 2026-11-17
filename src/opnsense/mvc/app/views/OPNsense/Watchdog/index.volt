@@ -156,9 +156,9 @@
             $('#wd-project').toggle(project && data.project_enabled !== false);
             $('#wd-project-off').toggle(project && data.project_enabled === false);
 
-            /* os-xgs-npu's coprocessor watchdog - what it does when the fast path stops answering,
-               xgs.general.fastpath_restart - read only, in the words of its own setting; set in XGS:
-               Settings. Nothing without os-xgs-npu (null). */
+            /* os-xgs-npu's setting When the fast path stops, xgs.general.fastpath_restart - read only,
+               by its own name and in the words of its choices; set in XGS: Settings. Nothing without
+               os-xgs-npu (null). */
             const fastpath = {
                 0: "{{ lang._('Say so, and nothing more') }}",
                 1: "{{ lang._('Take it up again, or restart') }}",
@@ -170,9 +170,8 @@
             const has_fp = fp !== null && fp !== undefined && fastpath[fp] !== undefined;
             $('#wd-fastpath').toggle(has_fp);
             if (has_fp) {
-                $('#wd-fastpath-state').text(plain(fp ? "{{ lang._('on') }}" : "{{ lang._('off') }}"))
-                    .toggleClass('text-success', fp !== 0);
                 $('#wd-fastpath-choice').text(plain(fastpath[fp]));
+                $('#wd-fastpath-none').toggle(data.fastpath_heartbeat === false);
             }
 
             const $rows = $('#wd-bits tbody').empty();
@@ -241,9 +240,11 @@
     </span>
     <div id="wd-fastpath" style="display: none; margin-top: 6px;">
         <i class="fa fa-fw fa-microchip text-muted"></i>
-        <strong>{{ lang._('Coprocessor watchdog') }}</strong>: <span id="wd-fastpath-state"></span>
-        &middot; {{ lang._('When the fast path stops') }}: <span id="wd-fastpath-choice"></span>
+        <strong>{{ lang._('When the fast path stops') }}</strong>: <span id="wd-fastpath-choice"></span>
         &middot; <a href="/ui/xgs/settings">{{ lang._('XGS: Settings') }}</a>
+        <span id="wd-fastpath-none" class="text-muted" style="display: none;">
+            &middot; {{ lang._('This host has no fast-path heartbeat: the setting has nothing to watch here.') }}
+        </span>
         <div class="text-muted">
             {{ lang._('os-xgs-npu watches the fast path of the coprocessor and, when it stops answering, does what its setting says. It is set in XGS: Settings; this page only shows it.') }}
         </div>
