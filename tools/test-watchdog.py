@@ -16,8 +16,8 @@
     OPNsense 26.7 printed them in qemu: this boot's only, after the last boot tag; true with its line
     where ichwd attached in the boot before, false where it attached without it, null where it did not
     attach or the line may be an earlier reset's; "boot" before the driver is loaded keeps nothing,
-    "ichwd" after it keeps one record a boot; nothing in a virtual machine or on AMD; the start hook 10
-    and both installers.
+    "ichwd" after it keeps one record a boot; nothing in a virtual machine or on AMD; the page, the
+    start hook 10 and both installers.
 
 POSIX only (os.pread, as on the firewall): run it on Linux or FreeBSD, or under WSL.
 
@@ -517,6 +517,32 @@ intel(RESET_BOOT + TIMEOUT_BOOT, {'read_by': 'os-watchdog', 'value': '0x00080800
 rr.after_driver()
 check("an AMD host: ichwd leaves the chipset's record alone", fields('read_by', 'value', 'boot'),
       ('os-watchdog', '0x00080800', BOOT - 86400))
+
+# the page shows ichwd's record where it is read: on Intel, not in a virtual machine
+for name, dmesg_boot, guest, want in (
+        ('Intel', booted(), 'none', True), ('Intel in a virtual machine', booted(), 'kvm', False),
+        ('AMD family 17h', 'Origin="AuthenticAMD"  Id=0x810f81  Family=0x17\n', 'none', True),
+        ('AMD family 16h', 'Origin="AuthenticAMD"  Id=0x730f01  Family=0x16\n', 'none', False)):
+    with open(INTEL_DMESG, 'w', encoding='utf-8') as handle:
+        handle.write(dmesg_boot)
+    st.reset_reason.DMESG, st.reset_reason.VM_GUEST = INTEL_DMESG, guest
+    check('status.py, %s: reset_supported %s' % (name, want), st.reset_supported(), want)
+
+with open(VOLT, encoding='utf-8') as handle:
+    volt = handle.read()
+ichwd_branch = volt[volt.find("if (r && r.read_by === 'ichwd')"):volt.find('if (!r || !r.value)')]
+check("the page: ichwd's timeout as bit 25's cause, 'hardware watchdog'",
+      "if (r.said === 'timeout') { return {cls: 'warn', what: \"{{ lang._('hardware watchdog') }}\"}; }" in ichwd_branch,
+      True)
+check("the page: attached without it, 'not the hardware watchdog'",
+      "if (r.said === 'nothing') { return {cls: '', what: \"{{ lang._('not the hardware watchdog') }}\"}; }"
+      in ichwd_branch, True)
+check("the page: ichwd's line as the value read, its cause as a row, and nothing read said so",
+      ("ichwd && reset.line ? reset.line" in volt, "if (ichwd && reset.said === 'timeout')" in volt,
+       "ichwd && !reset.said ? \"{{ lang._('Nothing was read from ichwd at this boot.') }}\"" in volt),
+      (True, True, True))
+check('the page says where the record is read: AMD, Intel, not in a virtual machine',
+      "On Intel: only whether the hardware watchdog caused it, as ichwd says when it attaches." in volt, True)
 
 # ichwd's word is read after watchdog.sh loads the driver: by the start hook 10 at every boot, and by
 # both installers where no record is kept yet, as they read the chipset's

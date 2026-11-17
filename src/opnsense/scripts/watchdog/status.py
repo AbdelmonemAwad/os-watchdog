@@ -31,8 +31,9 @@ import subprocess
 import sys
 
 # The same judgement as the start hook's, from the same file beside this one: an AMD processor of
-# family 17h or later, not in a virtual machine (2026-10-29). Its directory is named rather than
-# assumed, so that python3 -I, which leaves it out of the path, finds it too.
+# family 17h or later, not in a virtual machine (2026-10-29), or an Intel one, where ichwd's word is
+# kept (2026-11-17). Its directory is named rather than assumed, so that python3 -I, which leaves it
+# out of the path, finds it too.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import reset_reason                                                      # noqa: E402
 
@@ -149,6 +150,12 @@ def reset():
         return None
 
 
+def reset_supported():
+    """Whether this host keeps a reset record to show: the chipset's (AMD family 17h or later) or
+    ichwd's word (Intel), not in a virtual machine."""
+    return reset_reason.no_register() is None or reset_reason.no_ichwd() is None
+
+
 def main():
     restart, heartbeat = fastpath()
     ours = alive(PIDFILE)
@@ -177,9 +184,9 @@ def main():
         'fastpath_restart': restart,
         'fastpath_heartbeat': heartbeat,
         'reset': reset(),
-        # False where the chipset keeps no record to read: the page says "not available" then,
-        # rather than "not recorded" and whatever an older record kept
-        'reset_supported': reset_reason.no_register() is None,
+        # False where neither the chipset's record nor ichwd's word is read: the page says "not
+        # available" then, rather than "not recorded" and whatever an older record kept
+        'reset_supported': reset_supported(),
     }))
 
 

@@ -66,6 +66,14 @@
            their leading "the" here on 2026-10-29, as the page's values do; os-xgs-npu's page has it
            still. */
         function restart(r) {
+            /* On Intel the record is what ichwd said as it attached (reset_reason.py, 2026-11-17): the
+               hardware watchdog - judged as bit 25 is - where it said so, not it where it attached
+               without saying so, nothing where it did not attach. */
+            if (r && r.read_by === 'ichwd') {
+                if (r.said === 'timeout') { return {cls: 'warn', what: "{{ lang._('hardware watchdog') }}"}; }
+                if (r.said === 'nothing') { return {cls: '', what: "{{ lang._('not the hardware watchdog') }}"}; }
+                return {cls: '', what: "{{ lang._('not recorded') }}"};
+            }
             if (!r || !r.value) {
                 return {cls: '', what: "{{ lang._('not recorded') }}"};
             }
@@ -133,9 +141,10 @@
             $cards.append(card(data.timer.desc ? 'ok' : '', 'fa-microchip', "{{ lang._('Timer') }}",
                 data.timer.desc ? data.timer.driver : "{{ lang._('not found') }}",
                 data.timer.desc || "{{ lang._('Apply loads its driver') }}"));
-            /* Where the chipset keeps no record - not an AMD processor of family 17h or later, or a
-               virtual machine - the restart is "not available" rather than "not recorded", and a
-               record kept there by an older version is not shown (2026-10-29). */
+            /* Where no record is read - neither an AMD processor of family 17h or later nor an Intel
+               one, or a virtual machine - the restart is "not available" rather than "not recorded",
+               and a record kept there by an older version is not shown (2026-10-29; Intel since
+               2026-11-17). */
             const supported = data.reset_supported !== false;
             const reset = supported ? data.reset : null;
             const r = supported ? restart(reset) : {cls: '', what: "{{ lang._('not available') }}"};
@@ -180,14 +189,19 @@
                 $rows.append($('<tr/>').append($('<td/>').text(b.bit)).append($('<td/>').text(
                     reasons[b.bit] || "{{ lang._('no published meaning') }}")));
             });
-            if (!bits.length) {
+            /* ichwd's word, on Intel: one cause, with no bit to number; its line as the value read */
+            const ichwd = !!reset && reset.read_by === 'ichwd';
+            if (ichwd && reset.said === 'timeout') {
+                $rows.append($('<tr/>').append($('<td/>').text('-')).append($('<td/>').text(reasons[25])));
+            } else if (!bits.length) {
                 $rows.append($('<tr/>').append($('<td colspan="2" class="text-muted"/>').text(
                     !supported ? "{{ lang._('Not available on this host.') }}" :
+                    ichwd && !reset.said ? "{{ lang._('Nothing was read from ichwd at this boot.') }}" :
                     reset && reset.read_by === 'os-xgs-npu' && !reset.value ?
                         "{{ lang._('os-xgs-npu reads the record on this host and kept none for this boot.') }}" :
                         "{{ lang._('No cause recorded at this boot.') }}")));
             }
-            $('#wd-raw').text(reset && reset.value ? reset.value : '-');
+            $('#wd-raw').text(reset && reset.value ? reset.value : ichwd && reset.line ? reset.line : '-');
             $('#wd-reader').text(reset && reset.read_by ? reset.read_by : '-');
         }
 
@@ -262,7 +276,7 @@
     </div>
     <div id="reset" class="tab-pane">
         <div class="text-muted" style="padding: 10px 15px 0;">
-            {{ lang._('Why the host last reset, as its chipset recorded it: one bit for each cause, read early in every boot and cleared for the next. Only on AMD processors of family 17h or later, and not in a virtual machine.') }}
+            {{ lang._('Why the host last reset, as its chipset recorded it. On AMD processors of family 17h or later: one bit for each cause, read early in every boot and cleared for the next. On Intel: only whether the hardware watchdog caused it, as ichwd says when it attaches. Not in a virtual machine.') }}
         </div>
         <table id="wd-bits" class="table table-condensed table-striped">
             <thead>
