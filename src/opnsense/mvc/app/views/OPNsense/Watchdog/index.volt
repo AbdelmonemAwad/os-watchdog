@@ -201,7 +201,9 @@
                         "{{ lang._('os-xgs-npu reads the record on this host and kept none for this boot.') }}" :
                         "{{ lang._('No cause recorded at this boot.') }}")));
             }
-            $('#wd-raw').text(reset && reset.value ? reset.value : ichwd && reset.line ? reset.line : '-');
+            /* through plain(): ichwd's line has its description in <>, which OPNsense's API hands over
+               escaped, as &lt; and &gt;, to the page's own session */
+            $('#wd-raw').text(plain(reset && reset.value ? reset.value : ichwd && reset.line ? reset.line : '-'));
             $('#wd-reader').text(reset && reset.read_by ? reset.read_by : '-');
         }
 

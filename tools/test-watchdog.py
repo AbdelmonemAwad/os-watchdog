@@ -628,6 +628,11 @@ check("the page: ichwd's line as the value read, its cause as a row, and nothing
       ("ichwd && reset.line ? reset.line" in volt, "if (ichwd && reset.said === 'timeout')" in volt,
        "ichwd && !reset.said ? \"{{ lang._('Nothing was read from ichwd at this boot.') }}\"" in volt),
       (True, True, True))
+# ichwd's attach line has its description in <>, and OPNsense's API hands the page's own session its JSON
+# escaped (&lt; and &gt;): the value read goes through the page's plain(), as the cards' text does
+raw = re.findall(r"\$\('#wd-raw'\)\.text\((.*)\);", volt)
+check("the page: the value read through plain(), so ichwd's line shows as the kernel printed it", raw,
+      ["plain(reset && reset.value ? reset.value : ichwd && reset.line ? reset.line : '-')"])
 check('the page says where the record is read: AMD, Intel, not in a virtual machine',
       "On Intel: only whether the hardware watchdog caused it, as ichwd says when it attaches." in volt, True)
 
