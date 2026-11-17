@@ -57,9 +57,17 @@ Arms the hardware watchdog of the host, so a host that stops running is reset by
   with bit 25, false with a value read without it, null when nothing was read - and a reset it
   caused is written in the system log as such (since 2026-11-17; os-netreport's alert reads the
   field);
+- on Intel processors, keeps at every boot whether the hardware watchdog caused the last reset, as
+  FreeBSD's `ichwd` says when it attaches - `resuming after hardware watchdog timeout`, where the TCO
+  timer's record of it is set - read from this boot's kernel messages only, after the boot tag, as the
+  message buffer keeps the boots before, once the start hook has loaded the driver: `"watchdog"` true
+  with that line, false where ichwd attached without it, null where it did not attach, or where the
+  boot before had no ichwd to clear the record, so the line may be an earlier reset's. Nothing is read
+  from the hardware for it, and nothing in a virtual machine (since 2026-11-17);
 - **System: Hardware Watchdog** (XGS: Hardware Watchdog when os-xgs-npu is installed): whether the
-  timer is armed and by whom, the timer, the last restart with each bit it set, and two settings -
-  on or off, and the timeout (64, 128 or 256 seconds).
+  timer is armed and by whom, the timer, the last restart with each bit it set - on Intel, what ichwd
+  said, its line as the value read - and two settings - on or off, and the timeout (64, 128 or 256
+  seconds).
 
 ~~a page in the XGS section of OPNsense's menu~~ - it is under **System**, beside Fan Control (under
 **XGS** when os-xgs-npu is installed): the subject is the machine itself, and the plugin is not for
@@ -191,6 +199,12 @@ version 21), 2026-11-06, OPNsense 26.7 with os-xgs-npu installed: the release br
 Not run for 1.0.2: a hang in the kernel itself during a stop hook (the paused watchdogd stands in for
 one); a halt or power-off (`shutdown -h`, `-p`), which was run for 1.0.0 only; a host with neither
 os-xgs-npu nor an XGS board.
+
+The reset reason on Intel (2026-11-17) is held by `tools/test-watchdog.py`, which the checks run,
+against kernel messages as OPNsense 26.7 printed them in qemu on 2026-10-29 - ichwd's attach, its
+`resuming after hardware watchdog timeout` after the timer had run out, and the boots before them that
+the message buffer keeps. Not run yet on an Intel machine; in qemu nothing is read, as in any virtual
+machine.
 
 ## Installation
 
