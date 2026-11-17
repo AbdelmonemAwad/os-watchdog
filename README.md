@@ -66,12 +66,19 @@ Arms the hardware watchdog of the host, so a host that stops running is reset by
   is read from that boot's messages, or where they are gone from the record kept - taken as the boot
   before's only where the mark the start hook 07 leaves at every boot (`/var/db/os-watchdog/boots.json`)
   names it, not where a boot between kept none; a boot that stopped before the start hook 07 leaves no
-  mark, and cannot be seen. Nothing is read from the hardware for it, and nothing in a virtual machine
-  (since 2026-11-17);
+  mark, and cannot be seen. Only where ichwd attaches: a chipset in its tables, with its driver loaded -
+  by this plugin as it arms the timer, so the setting on and the timer not held by os-xgs-npu or
+  another watchdogd, or by the loader. Elsewhere on Intel - a chipset ichwd does not know, or nothing
+  that loads it, as with the setting off or os-xgs-npu's watchdog script installed - nothing is read,
+  and the page's last restart is not available unless a record kept says what ichwd said. Nothing is
+  read from the hardware for it, and nothing in a virtual machine (since 2026-11-17);
 - **System: Hardware Watchdog** (XGS: Hardware Watchdog when os-xgs-npu is installed): whether the
   timer is armed and by whom, the timer, the last restart with each bit it set - on Intel, what ichwd
   said, its line as the value read - and two settings - on or off, and the timeout (64, 128 or 256
-  seconds).
+  seconds). The last restart is called the hardware watchdog only where the record's `watchdog` field
+  is true; a watchdog bit or timeout the record cannot tie to this restart (the field null) is shown
+  as "maybe an earlier watchdog reset", and ichwd attached without a timeout as "no watchdog timeout
+  seen" - firmware may clear that status, so it is not proof of another cause.
 
 ~~a page in the XGS section of OPNsense's menu~~ - it is under **System**, beside Fan Control (under
 **XGS** when os-xgs-npu is installed): the subject is the machine itself, and the plugin is not for

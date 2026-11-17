@@ -66,12 +66,15 @@
            their leading "the" here on 2026-10-29, as the page's values do; os-xgs-npu's page has it
            still. */
         function restart(r) {
-            /* On Intel the record is what ichwd said as it attached (reset_reason.py, 2026-11-17): the
-               hardware watchdog - judged as bit 25 is - where it said so, not it where it attached
-               without saying so, nothing where it did not attach. */
+            /* On Intel the record is what ichwd said as it attached (reset_reason.py, 2026-11-17). The
+               record's "watchdog" field rules: the hardware watchdog only where it is true; a timeout ichwd
+               reported with the field null may be one an earlier boot left; ichwd attached without one is
+               no timeout seen - not proof of another cause (firmware may clear the status) - and nothing is
+               known where it did not attach. */
             if (r && r.read_by === 'ichwd') {
-                if (r.said === 'timeout') { return {cls: 'warn', what: "{{ lang._('hardware watchdog') }}"}; }
-                if (r.said === 'nothing') { return {cls: '', what: "{{ lang._('not the hardware watchdog') }}"}; }
+                if (r.watchdog === true) { return {cls: 'warn', what: "{{ lang._('hardware watchdog') }}"}; }
+                if (r.said === 'timeout') { return {cls: '', what: "{{ lang._('maybe an earlier watchdog reset') }}"}; }
+                if (r.said === 'nothing') { return {cls: '', what: "{{ lang._('no watchdog timeout seen') }}"}; }
                 return {cls: '', what: "{{ lang._('not recorded') }}"};
             }
             if (!r || !r.value) {
@@ -82,7 +85,12 @@
             if (has([27, 31, 30])) { return {cls: 'bad', what: "{{ lang._('an uncorrected hardware error') }}"}; }
             if (has([23])) { return {cls: 'bad', what: "{{ lang._('processor shutdown') }}"}; }
             if (has([0, 9])) { return {cls: 'bad', what: "{{ lang._('overheating') }}"}; }
-            if (has([25])) { return {cls: 'warn', what: "{{ lang._('hardware watchdog') }}"}; }
+            /* bit 25 with the record's "watchdog" field null: the bit may be one an earlier boot left
+               (reset_reason.py); a record kept before the field has none, and bit 25 rules there */
+            if (has([25])) {
+                return r.watchdog === null ? {cls: '', what: "{{ lang._('maybe an earlier watchdog reset') }}"}
+                                           : {cls: 'warn', what: "{{ lang._('hardware watchdog') }}"};
+            }
             if (has([24, 29])) { return {cls: 'warn', what: "{{ lang._('a failed boot') }}"}; }
             if (has([16, 22, 26])) { return {cls: 'warn', what: "{{ lang._('reset pin') }}"}; }
             if (has([1, 2, 4])) { return {cls: 'warn', what: "{{ lang._('power button') }}"}; }
@@ -142,9 +150,9 @@
                 data.timer.desc ? data.timer.driver : "{{ lang._('not found') }}",
                 data.timer.desc || "{{ lang._('Apply loads its driver') }}"));
             /* Where no record is read - neither an AMD processor of family 17h or later nor an Intel
-               one, or a virtual machine - the restart is "not available" rather than "not recorded",
-               and a record kept there by an older version is not shown (2026-10-29; Intel since
-               2026-11-17). */
+               one where ichwd speaks (status.py's reset_supported), or a virtual machine - the restart
+               is "not available" rather than "not recorded", and a record kept there by an older
+               version is not shown (2026-10-29; Intel since 2026-11-17). */
             const supported = data.reset_supported !== false;
             const reset = supported ? data.reset : null;
             const r = supported ? restart(reset) : {cls: '', what: "{{ lang._('not available') }}"};
@@ -278,7 +286,7 @@
     </div>
     <div id="reset" class="tab-pane">
         <div class="text-muted" style="padding: 10px 15px 0;">
-            {{ lang._('Why the host last reset, as its chipset recorded it. On AMD processors of family 17h or later: one bit for each cause, read early in every boot and cleared for the next. On Intel: only whether the hardware watchdog caused it, as ichwd says when it attaches. Not in a virtual machine.') }}
+            {{ lang._('Why the host last reset, as its chipset recorded it. On AMD processors of family 17h or later: one bit for each cause, read early in every boot and cleared for the next. On Intel: only whether the hardware watchdog caused it, as ichwd says when it attaches - where ichwd knows the chipset and this plugin arms the timer, so the setting is on and neither os-xgs-npu nor another watchdogd holds the timer. Not in a virtual machine.') }}
         </div>
         <table id="wd-bits" class="table table-condensed table-striped">
             <thead>

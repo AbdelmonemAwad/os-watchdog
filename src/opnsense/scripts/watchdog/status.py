@@ -6,7 +6,8 @@
 """
 What the page shows, as one JSON object: whether the timer is armed and by whom, the timer itself,
 the timeout the running watchdogd asked for, the setting, and the last reset as reset_reason.py kept
-it at this boot - or that this host has no reset record at all, as reset_reason.py judges it.
+it at this boot - or that this host has no reset record at all, as reset_reason.py judges it, and on
+Intel where ichwd does not speak (reset_supported()).
 
     status.py
 
@@ -31,9 +32,9 @@ import subprocess
 import sys
 
 # The same judgement as the start hook's, from the same file beside this one: an AMD processor of
-# family 17h or later, not in a virtual machine (2026-10-29), or an Intel one, where ichwd's word is
-# kept (2026-11-17). Its directory is named rather than assumed, so that python3 -I, which leaves it
-# out of the path, finds it too.
+# family 17h or later, not in a virtual machine (2026-10-29), or an Intel one where ichwd speaks, whose
+# word is kept (2026-11-17). Its directory is named rather than assumed, so that python3 -I, which
+# leaves it out of the path, finds it too.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import reset_reason                                                      # noqa: E402
 
@@ -150,14 +151,24 @@ def reset():
         return None
 
 
-def reset_supported():
-    """Whether this host keeps a reset record to show: the chipset's (AMD family 17h or later) or
-    ichwd's word (Intel), not in a virtual machine."""
-    return reset_reason.no_register() is None or reset_reason.no_ichwd() is None
+def reset_supported(driver, record):
+    """Whether this host keeps a reset record to show: the chipset's (AMD family 17h or later), or on
+    Intel ichwd's word where ichwd speaks - it attached at this boot (driver, the timer's), or the
+    record kept says what it said. ichwd attaches only where its tables know the chipset and its driver
+    is loaded, which watchdog.sh does as it arms the timer: the setting on, the timer not held by
+    os-xgs-npu or another watchdogd. Elsewhere on Intel nothing is ever read, and the page says "not
+    available", as in a virtual machine, where nothing is read at all."""
+    if reset_reason.no_register() is None:
+        return True
+    if reset_reason.no_ichwd() is not None:
+        return False
+    return driver == 'ichwd' or (isinstance(record, dict) and record.get('read_by') == 'ichwd' and
+                                 record.get('said') is not None)
 
 
 def main():
     restart, heartbeat = fastpath()
+    found, record = timer(), reset()
     ours = alive(PIDFILE)
     theirs = alive(PROJECT_PIDFILE) if os.path.exists(PROJECT) else None
     others = [int(p) for p in run(['/bin/pgrep', '-x', 'watchdogd']).split() if p.isdigit()]
@@ -175,7 +186,7 @@ def main():
         'held_by': held_by,
         'pid': pid,
         'timeout': timeout_of(pid) if pid else None,
-        'timer': timer(),
+        'timer': found,
         'enabled': setting('enabled', '1') == '1',
         'configured_timeout': int(setting('timeout', '128')),
         'project_enabled': project_setting() if os.path.exists(PROJECT) else None,
@@ -183,10 +194,11 @@ def main():
         # for it: null without os-xgs-npu
         'fastpath_restart': restart,
         'fastpath_heartbeat': heartbeat,
-        'reset': reset(),
-        # False where neither the chipset's record nor ichwd's word is read: the page says "not
-        # available" then, rather than "not recorded" and whatever an older record kept
-        'reset_supported': reset_supported(),
+        'reset': record,
+        # False where neither the chipset's record nor ichwd's word is read - on Intel, where ichwd has
+        # not attached and the record kept says nothing it said: the page says "not available" then,
+        # rather than "not recorded" and whatever an older record kept
+        'reset_supported': reset_supported(found['driver'], record),
     }))
 
 

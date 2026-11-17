@@ -606,24 +606,39 @@ check("an AMD host: ichwd leaves the chipset's record alone, and leaves no mark"
       + (marked(),), ('os-watchdog', '0x00080800', BOOT - 86400, None))
 
 # the page shows ichwd's record where it is read: on Intel, not in a virtual machine
-for name, dmesg_boot, guest, want in (
-        ('Intel', booted(), 'none', True), ('Intel in a virtual machine', booted(), 'kvm', False),
-        ('AMD family 17h', 'Origin="AuthenticAMD"  Id=0x810f81  Family=0x17\n', 'none', True),
-        ('AMD family 16h', 'Origin="AuthenticAMD"  Id=0x730f01  Family=0x16\n', 'none', False)):
+# - on Intel only where ichwd speaks: it attached at this boot (the timer's driver), or the record kept says
+#   what it said; nowhere else on Intel (a chipset ichwd does not know, or nothing that loads it)
+SPOKE = {'read_by': 'ichwd', 'said': 'nothing'}
+for name, dmesg_boot, guest, driver, record, want in (
+        ('Intel, ichwd attached', booted(), 'none', 'ichwd', None, True),
+        ('Intel, ichwd not attached, its word kept', booted(), 'none', None, SPOKE, True),
+        ('Intel, ichwd not attached, nothing it said', booted(), 'none', None, {'read_by': 'ichwd', 'said': None}, False),
+        ('Intel, ichwd not attached, no record', booted(), 'none', None, None, False),
+        ('Intel, another timer', booted(), 'none', 'amdsbwd', None, False),
+        ('Intel in a virtual machine, ichwd attached', booted(), 'kvm', 'ichwd', SPOKE, False),
+        ('AMD family 17h', 'Origin="AuthenticAMD"  Id=0x810f81  Family=0x17\n', 'none', 'amdsbwd', None, True),
+        ('AMD family 16h', 'Origin="AuthenticAMD"  Id=0x730f01  Family=0x16\n', 'none', None, None, False)):
     with open(INTEL_DMESG, 'w', encoding='utf-8') as handle:
         handle.write(dmesg_boot)
     st.reset_reason.DMESG, st.reset_reason.VM_GUEST = INTEL_DMESG, guest
-    check('status.py, %s: reset_supported %s' % (name, want), st.reset_supported(), want)
+    check('status.py, %s: reset_supported %s' % (name, want), st.reset_supported(driver, record), want)
 
 with open(VOLT, encoding='utf-8') as handle:
     volt = handle.read()
 ichwd_branch = volt[volt.find("if (r && r.read_by === 'ichwd')"):volt.find('if (!r || !r.value)')]
-check("the page: ichwd's timeout as bit 25's cause, 'hardware watchdog'",
-      "if (r.said === 'timeout') { return {cls: 'warn', what: \"{{ lang._('hardware watchdog') }}\"}; }" in ichwd_branch,
+check("the page: on Intel the record's watchdog field rules - a warning only where it is true",
+      "if (r.watchdog === true) { return {cls: 'warn', what: \"{{ lang._('hardware watchdog') }}\"}; }" in ichwd_branch,
       True)
-check("the page: attached without it, 'not the hardware watchdog'",
-      "if (r.said === 'nothing') { return {cls: '', what: \"{{ lang._('not the hardware watchdog') }}\"}; }"
+check("the page: ichwd's timeout with the field null, 'maybe an earlier watchdog reset', not a warning",
+      "if (r.said === 'timeout') { return {cls: '', what: \"{{ lang._('maybe an earlier watchdog reset') }}\"}; }"
       in ichwd_branch, True)
+check("the page: attached without a timeout, 'no watchdog timeout seen'",
+      "if (r.said === 'nothing') { return {cls: '', what: \"{{ lang._('no watchdog timeout seen') }}\"}; }"
+      in ichwd_branch, True)
+check("the page: on AMD, bit 25 with the field null is 'maybe an earlier watchdog reset'; true or a record "
+      "without the field, 'hardware watchdog'",
+      "return r.watchdog === null ? {cls: '', what: \"{{ lang._('maybe an earlier watchdog reset') }}\"}" in volt, True)
+check("the page: the old wording 'not the hardware watchdog' is gone", "not the hardware watchdog" in volt, False)
 check("the page: ichwd's line as the value read, its cause as a row, and nothing read said so",
       ("ichwd && reset.line ? reset.line" in volt, "if (ichwd && reset.said === 'timeout')" in volt,
        "ichwd && !reset.said ? \"{{ lang._('Nothing was read from ichwd at this boot.') }}\"" in volt),
@@ -633,8 +648,10 @@ check("the page: ichwd's line as the value read, its cause as a row, and nothing
 raw = re.findall(r"\$\('#wd-raw'\)\.text\((.*)\);", volt)
 check("the page: the value read through plain(), so ichwd's line shows as the kernel printed it", raw,
       ["plain(reset && reset.value ? reset.value : ichwd && reset.line ? reset.line : '-')"])
-check('the page says where the record is read: AMD, Intel, not in a virtual machine',
-      "On Intel: only whether the hardware watchdog caused it, as ichwd says when it attaches." in volt, True)
+check('the page says where the record is read: AMD, Intel where ichwd speaks, not in a virtual machine',
+      "On Intel: only whether the hardware watchdog caused it, as ichwd says when it attaches - where ichwd knows the "
+      "chipset and this plugin arms the timer, so the setting is on and neither os-xgs-npu nor another watchdogd holds "
+      "the timer. Not in a virtual machine." in volt, True)
 
 # ichwd's word is read after watchdog.sh loads the driver: by the start hook 10 at every boot, and by
 # both installers where no record is kept yet, as they read the chipset's
