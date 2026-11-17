@@ -11,7 +11,13 @@
     0 for a value that is not one, and the page's line for each;
   * on by default: Watchdog.xml's defaults, and a config.xml with no Watchdog section (or none at
     all) taken as on by status.py and by watchdog.sh, whose "status" alone runs here (it reads and
-    never arms); off only where the section says 0.
+    never arms); off only where the section says 0;
+  * on Intel, reset_reason.py's record of what ichwd said as it attached, against kernel messages as
+    OPNsense 26.7 printed them in qemu: this boot's only, after the last boot tag; true with its line
+    where ichwd attached in the boot before, false where it attached without it, null where it did not
+    attach or the line may be an earlier reset's; "boot" before the driver is loaded keeps nothing,
+    "ichwd" after it keeps one record a boot; nothing in a virtual machine or on AMD; the start hook 10
+    and both installers.
 
 POSIX only (os.pread, as on the firewall): run it on Linux or FreeBSD, or under WSL.
 
@@ -19,6 +25,7 @@ POSIX only (os.pread, as on the firewall): run it on Linux or FreeBSD, or under 
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -337,6 +344,194 @@ if not held:
     check('watchdog.sh, no config.xml at all: on', sh_status(), 'not armed (on in the settings)')
 config('<watchdog>1</watchdog>')
 check('status.py, no Watchdog section: timeout 128', int(st.setting('timeout', '128')), 128)
+
+# ---------------------------------------------------------------- 4. Intel: what ichwd said (fix-13, d6 a)
+# Kernel messages as dmesg(8) printed them on OPNsense 26.7 in qemu - its q35 board's ICH9 TCO timer -
+# in the test of 2026-10-29: a boot in which ichwd attached at 460 s and the timer was then let run out,
+# so no shutdown follows, and the boot after it, whose ichwd found the timer's record at 44 s and which
+# ended in an orderly shutdown. The buffer keeps the boots before, each after the boot tag. Each line as
+# the kernel wrote it there, its uptime first; the boots are cut down to the lines read here.
+
+TAG = '---<<BOOT>>---'
+INTEL = '[1]   Origin="GenuineIntel"  Id=0x50657  Family=0x6  Model=0x55  Stepping=7'
+ISA = '[1] isa0: <ISA bus> on isab0'
+ATTACHED_THEN_RESET = '[460] ichwd0: <Intel ICH9 watchdog timer> on isa0'
+ATTACH = '[44] ichwd0: <Intel ICH9 watchdog timer> on isa0'
+TIMEOUT = '[44] ichwd0: resuming after hardware watchdog timeout'
+UPTIME = '[434] Uptime: 7m14s'
+# Not seen there, so written as the source prints them: an attach that failed after its line began, as
+# newbus says it (sys/kern/subr_bus.c, device_attach()), with ichwd's reason (ichwd_clear_noreboot());
+# and the line of a TCO v4 timer, whose I/O and memory the bus prints (sys/isa/isa_common.c,
+# isa_print_child()) - its addresses made up
+FAILED = ('[25] ichwd0: <Intel ICH9 watchdog timer> on isa0',
+          '[25] ichwd0: ICH WDT present but disabled in BIOS or hardware',
+          '[25] device_attach: ichwd0 attach returned 6')
+V4 = '[31] ichwd0: <Intel Atom C3000 watchdog timer> at port 0x400-0x41f iomem 0xfd6e000c-0xfd6e000f on isa0'
+LINE = 'ichwd0: resuming after hardware watchdog timeout'
+
+
+def booted(*lines):
+    """One boot as dmesg prints it: the boot tag, the processor, the ISA bus, then lines."""
+    return TAG + '\n' + ''.join(line + '\n' for line in (INTEL, ISA) + lines)
+
+
+RESET_BOOT = booted(ATTACHED_THEN_RESET)           # ichwd attached, then the timer ran out: no shutdown
+NO_ICHWD_BOOT = booted(UPTIME)                     # a boot that never loaded ichwd
+TIMEOUT_BOOT = booted(ATTACH, TIMEOUT, UPTIME)     # ichwd found the timer's record, then a shutdown
+QUIET_BOOT = booted(ATTACH)                        # ichwd attached and found nothing
+KMSG = os.path.join(TOP, 'dmesg.out')
+INTEL_DMESG = os.path.join(TOP, 'dmesg-intel.boot')
+
+check('ichwd_said: the timeout line', rr.ichwd_said(booted(ATTACH, TIMEOUT)), ('timeout', LINE))
+check('ichwd_said: attached without it', rr.ichwd_said(QUIET_BOOT),
+      ('nothing', 'ichwd0: <Intel ICH9 watchdog timer> on isa0'))
+check('ichwd_said: a TCO v4 line, with its I/O and memory', rr.ichwd_said(booted(V4))[0], 'nothing')
+check('ichwd_said: an attach that failed is none', rr.ichwd_said(booted(*FAILED)), (None, None))
+check('ichwd_said: one that failed, then one that attached', rr.ichwd_said(booted(*FAILED + (ATTACH,)))[0],
+      'nothing')
+check('ichwd_said: no ichwd', rr.ichwd_said(NO_ICHWD_BOOT), (None, None))
+check('ichwd_said: no message at all', rr.ichwd_said(None), (None, None))
+
+check("boots: this boot's after the last tag, the boot before's between the last two",
+      rr.boots(RESET_BOOT + TIMEOUT_BOOT + QUIET_BOOT, TAG), (TIMEOUT_BOOT[len(TAG):], QUIET_BOOT[len(TAG):], True))
+check("boots: before a lone tag, only the end of the boot before", rr.boots('[460] older\n' + QUIET_BOOT, TAG),
+      ('[460] older\n', QUIET_BOOT[len(TAG):], False))
+check('boots: a tag after a line with no end', rr.boots('[434] Uptime: 7m14s' + QUIET_BOOT, TAG)[1],
+      QUIET_BOOT[len(TAG):])
+check('boots: no tag, nothing to tell this boot by', (rr.boots(QUIET_BOOT[len(TAG):], TAG),
+                                                      rr.boots(QUIET_BOOT, '')), ((None, None, False),) * 2)
+
+
+def intel(kmsg, earlier=None, dmesg_boot=None, guest='none', tag=TAG):
+    """An Intel host: what dmesg prints (kmsg), the record kept before (earlier), dmesg.boot - as rc
+    wrote it early in this boot, before the start hooks: by default kmsg without this boot's lines from
+    ichwd - kern.vm_guest and kern.boot_tag. Nothing kept yet, no line logged."""
+    rr.DMESG, rr.KMSG, rr.VM_GUEST, rr.BOOT_TAG = INTEL_DMESG, KMSG, guest, tag
+    if dmesg_boot is None:
+        head, _, this = kmsg.rpartition(TAG)
+        dmesg_boot = head + _ + '\n'.join(line for line in this.split('\n') if 'ichwd' not in line)
+    for path, text in ((KMSG, kmsg), (INTEL_DMESG, dmesg_boot)):
+        with open(path, 'w', encoding='utf-8') as handle:
+            handle.write(text)
+    if os.path.exists(KEPT):
+        os.remove(KEPT)
+    if earlier is not None:
+        os.makedirs(os.path.dirname(KEPT), exist_ok=True)
+        with open(KEPT, 'w', encoding='utf-8') as handle:
+            json.dump(dict({'boot': BOOT - 86400, 'read_at': BOOT - 86380}, **earlier), handle)
+    del logged[:]
+
+
+def fields(*names):
+    record = kept()
+    return tuple(record.get(name) for name in names)
+
+
+# ichwd's line, where ichwd attached in the boot before - as in the test of 2026-10-29
+intel(RESET_BOOT + TIMEOUT_BOOT)
+rr.after_driver()
+check("ichwd's line, ichwd attached in the boot before: watchdog true, read by ichwd, no value",
+      fields('watchdog', 'read_by', 'said', 'line', 'value', 'bits', 'boot'), (True, 'ichwd', 'timeout', LINE, None, [], BOOT))
+check("ichwd's line: its line in the system log, naming ichwd", (len(said()), 'read by ichwd' in ''.join(said())),
+      (1, True))
+
+# a line that may be an earlier reset's: the boot before had no ichwd to clear the timer's record
+intel(NO_ICHWD_BOOT + TIMEOUT_BOOT)
+rr.after_driver()
+check("ichwd's line, the boot before whole and without ichwd: watchdog null, no line in the log",
+      (fields('watchdog', 'said'), said()), ((None, 'timeout'), []))
+# the boot before's messages gone (a lone tag): its record says whether ichwd attached then
+for name, earlier, want in (
+        ("the record of the boot before says ichwd attached", {'read_by': 'ichwd', 'said': 'nothing'}, True),
+        ("the record of the boot before says ichwd did not attach", {'read_by': 'ichwd', 'said': None}, None),
+        ('no record of the boot before', None, None),
+        ("the record of the boot before is the chipset's, not ichwd's",
+         {'read_by': 'os-watchdog', 'value': '0x00080800'}, None)):
+    intel('[434] end of an older boot\n' + TIMEOUT_BOOT, earlier)
+    rr.after_driver()
+    check("ichwd's line, the boot before's messages gone, %s: watchdog %s" % (name, json.dumps(want)),
+          fields('watchdog'), (want,))
+
+# attached without the line: false; and an earlier boot's line is not this boot's
+intel(RESET_BOOT + QUIET_BOOT)
+rr.after_driver()
+check('ichwd attached and said nothing: watchdog false, no line in the log',
+      (fields('watchdog', 'said', 'line'), said()), ((False, 'nothing', 'ichwd0: <Intel ICH9 watchdog timer> on isa0'), []))
+intel(RESET_BOOT + TIMEOUT_BOOT + QUIET_BOOT)
+rr.after_driver()
+check("the boot before's line is not this boot's: false where this boot's ichwd said nothing",
+      fields('watchdog', 'said'), (False, 'nothing'))
+intel(RESET_BOOT + TIMEOUT_BOOT + NO_ICHWD_BOOT)
+rr.after_driver()
+check("the boot before's line is not this boot's: null where ichwd did not attach at this boot",
+      (fields('watchdog', 'said', 'note'), said()), ((None, None, 'ichwd did not attach at this boot'), []))
+intel(RESET_BOOT + booted(*FAILED))
+rr.after_driver()
+check('an attach that failed: watchdog null', fields('watchdog', 'said'), (None, None))
+intel(TIMEOUT_BOOT[len(TAG):], dmesg_boot=INTEL + '\n')
+rr.after_driver()
+check("no boot tag in dmesg nor in dmesg.boot: null, this boot's start not there",
+      fields('watchdog', 'note'), (None, "this boot's start is not in the kernel's messages"))
+intel(RESET_BOOT + TIMEOUT_BOOT, tag='')
+rr.after_driver()
+check('kern.boot_tag empty: nothing tells this boot from the ones before, null', fields('watchdog', 'said'), (None, None))
+# dmesg's buffer has turned over since this boot began (its tag gone); dmesg.boot, written early in it,
+# holds the boot's start - with ichwd where the loader had loaded it, and without where it was loaded
+# later, which what is left of the buffer cannot tell from a second attach: null
+intel(TIMEOUT_BOOT[len(TAG) + 200:], dmesg_boot=RESET_BOOT + booted(ATTACH, TIMEOUT))
+rr.after_driver()
+check("dmesg without this boot's tag: dmesg.boot's, where the loader's ichwd said it", fields('watchdog', 'said'),
+      (True, 'timeout'))
+intel('[9000] em0: link state changed to UP\n' + QUIET_BOOT[len(TAG):].split(ISA + '\n')[1], dmesg_boot=RESET_BOOT + booted())
+rr.after_driver()
+check("dmesg without this boot's tag, dmesg.boot without ichwd: null, this boot's start not there",
+      fields('watchdog', 'said', 'note'), (None, None, "this boot's start is not in the kernel's messages"))
+
+# boot (the start hook 07) runs before watchdog.sh loads the driver, and keeps nothing on Intel - not
+# even what an ichwd the loader loaded said: one reader a boot, ichwd, so that os-netreport sees one
+# record a boot, final. The record of the boot before stays until then.
+for name, kmsg in (('ichwd not attached yet', RESET_BOOT + booted()),
+                   ('ichwd attached already, the loader loaded it', RESET_BOOT + TIMEOUT_BOOT)):
+    intel(kmsg, {'read_by': 'ichwd', 'said': 'nothing', 'watchdog': False})
+    rr.at_boot()
+    check('boot on Intel, %s: nothing kept, the record of the boot before as it was' % name, fields('boot', 'said'),
+          (BOOT - 86400, 'nothing'))
+intel(RESET_BOOT + booted(), {'read_by': 'ichwd', 'said': 'nothing', 'watchdog': False})
+with open(KMSG, 'a', encoding='utf-8') as handle:
+    handle.write(ATTACH + '\n' + TIMEOUT + '\n')
+rr.after_driver()
+check('ichwd, once watchdog.sh loaded the driver: this boot kept, true', fields('boot', 'watchdog'), (BOOT, True))
+first = kept()
+with open(KMSG, 'w', encoding='utf-8') as handle:
+    handle.write(TIMEOUT_BOOT[len(TAG):])
+rr.after_driver()
+check('ichwd again in the same boot: the record kept first stays', kept(), first)
+
+# nothing in a virtual machine, as on AMD; nothing for ichwd to say on AMD
+intel(RESET_BOOT + TIMEOUT_BOOT, guest='kvm')
+rr.at_boot()
+rr.after_driver()
+check('a virtual machine: neither boot nor ichwd keeps a record', os.path.exists(KEPT), False)
+intel(RESET_BOOT + TIMEOUT_BOOT, {'read_by': 'os-watchdog', 'value': '0x00080800'},
+      dmesg_boot='CPU: AMD Ryzen Embedded\n  Origin="AuthenticAMD"  Id=0x810f81  Family=0x17  Model=0x18\n')
+rr.after_driver()
+check("an AMD host: ichwd leaves the chipset's record alone", fields('read_by', 'value', 'boot'),
+      ('os-watchdog', '0x00080800', BOOT - 86400))
+
+# ichwd's word is read after watchdog.sh loads the driver: by the start hook 10 at every boot, and by
+# both installers where no record is kept yet, as they read the chipset's
+HOOK10 = os.path.join(ROOT, 'src', 'etc', 'rc.syshook.d', 'start', '10-watchdog')
+with open(HOOK10, encoding='utf-8') as handle:
+    hook = handle.read()
+check('start/10: reset_reason.py ichwd after watchdog.sh start',
+      0 <= hook.find('/bin/sh "${SCRIPT}" start') < hook.find('"${R}" ichwd') and
+      'R=/usr/local/opnsense/scripts/watchdog/reset_reason.py' in hook, True)
+AFTER_START = re.compile(r'watchdog\.sh start[^\n]*\n(?:#[^\n]*\n)*\[ -e /var/db/os-watchdog/reset-reason\.json \] \|\|\n'
+                         r'\s+/usr/local/opnsense/scripts/watchdog/reset_reason\.py ichwd')
+for installer in (('install', 'install.sh'), ('pkg', 'post-install.sh')):
+    with open(os.path.join(ROOT, *installer), encoding='utf-8') as handle:
+        check('%s: reset_reason.py ichwd after watchdog.sh start, where no record is kept yet' % '/'.join(installer),
+              bool(AFTER_START.search(handle.read())), True)
 
 shutil.rmtree(TOP, ignore_errors=True)
 print('%d failure(s)' % failures)

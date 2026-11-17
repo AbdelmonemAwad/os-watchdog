@@ -47,7 +47,8 @@ jobs:
 
       # reset_reason.py's record (its "watchdog" field and log line), status.py's coprocessor line, and
       # the timer on by default (the model, status.py and watchdog.sh's status with no Watchdog section),
-      # against files in a temporary directory standing in for the chipset, config.xml and os-xgs-npu.
+      # against files in a temporary directory standing in for the chipset, config.xml and os-xgs-npu;
+      # and on Intel what ichwd said, against kernel messages as OPNsense printed them.
       - name: The scripts against files standing in for the host
         run: python3 tools/test-watchdog.py
 
