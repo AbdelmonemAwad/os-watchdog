@@ -7,7 +7,8 @@
 # the next boot - scripts/watchdog/reset_reason.py. Early among the start hooks, so it is kept before
 # anything else in this boot can go wrong, and after os-xgs-npu's 06-xgs-reset-reason, whose record
 # it takes where that is installed. On an Intel host it is what ichwd says when it attaches, kept by
-# the start hook 10 once watchdog.sh has loaded it. Never fails the boot.
+# the start hook 10 once watchdog.sh has loaded it; here only a mark that this boot got this far, by
+# which the start hook 10 knows the boot before's record. Never fails the boot.
 R=/usr/local/opnsense/scripts/watchdog/reset_reason.py
 [ -x "${R}" ] || exit 0
 "${R}" boot > /dev/null 2>&1

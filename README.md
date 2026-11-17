@@ -62,8 +62,12 @@ Arms the hardware watchdog of the host, so a host that stops running is reset by
   timer's record of it is set - read from this boot's kernel messages only, after the boot tag, as the
   message buffer keeps the boots before, once the start hook has loaded the driver: `"watchdog"` true
   with that line, false where ichwd attached without it, null where it did not attach, or where the
-  boot before had no ichwd to clear the record, so the line may be an earlier reset's. Nothing is read
-  from the hardware for it, and nothing in a virtual machine (since 2026-11-17);
+  boot before had no ichwd to clear the record, so the line may be an earlier reset's. Whether it had
+  is read from that boot's messages, or where they are gone from the record kept - taken as the boot
+  before's only where the mark the start hook 07 leaves at every boot (`/var/db/os-watchdog/boots.json`)
+  names it, not where a boot between kept none; a boot that stopped before the start hook 07 leaves no
+  mark, and cannot be seen. Nothing is read from the hardware for it, and nothing in a virtual machine
+  (since 2026-11-17);
 - **System: Hardware Watchdog** (XGS: Hardware Watchdog when os-xgs-npu is installed): whether the
   timer is armed and by whom, the timer, the last restart with each bit it set - on Intel, what ichwd
   said, its line as the value read - and two settings - on or off, and the timeout (64, 128 or 256

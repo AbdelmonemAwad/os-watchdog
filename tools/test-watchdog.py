@@ -15,9 +15,10 @@
   * on Intel, reset_reason.py's record of what ichwd said as it attached, against kernel messages as
     OPNsense 26.7 printed them in qemu: this boot's only, after the last boot tag; true with its line
     where ichwd attached in the boot before, false where it attached without it, null where it did not
-    attach or the line may be an earlier reset's; "boot" before the driver is loaded keeps nothing,
-    "ichwd" after it keeps one record a boot; nothing in a virtual machine or on AMD; the page, the
-    start hook 10 and both installers.
+    attach or the line may be an earlier reset's - the boot before's record, where its messages are
+    gone, taken only where the mark of the start hook 07 names it; "boot" before the driver is loaded
+    keeps no record, only that mark, "ichwd" after it keeps one record a boot; nothing in a virtual
+    machine or on AMD; the page, the start hook 10 and both installers.
 
 POSIX only (os.pread, as on the firewall): run it on Linux or FreeBSD, or under WSL.
 
@@ -53,6 +54,7 @@ TOP = tempfile.mkdtemp(prefix='os-watchdog-test-')
 MEM = os.path.join(TOP, 'mem')
 DMESG = os.path.join(TOP, 'dmesg.boot')
 KEPT = os.path.join(TOP, 'db', 'reset-reason.json')
+BOOTS = os.path.join(TOP, 'db', 'boots.json')
 PROJECT = os.path.join(TOP, 'xgs', 'reset_reason.py')
 PROJECT_KEPT = os.path.join(TOP, 'xgs-db', 'reset-reason.json')
 BOOT = 1763337600
@@ -60,6 +62,7 @@ BOOT = 1763337600
 os.environ.update({
     'XGS_RESET_MEM': MEM, 'XGS_RESET_OFFSET': '0', 'XGS_RESET_DMESG': DMESG, 'XGS_RESET_STATE': KEPT,
     'XGS_RESET_PROJECT': PROJECT, 'XGS_RESET_PROJECT_STATE': PROJECT_KEPT, 'XGS_RESET_VM_GUEST': 'none',
+    'XGS_RESET_BOOTS': BOOTS,
 })
 with open(DMESG, 'w', encoding='utf-8') as handle:
     handle.write('CPU: AMD Ryzen Embedded\n  Origin="AuthenticAMD"  Id=0x810f81  Family=0x17  Model=0x18\n')
@@ -79,10 +82,11 @@ rr.boot_time = lambda: BOOT
 
 
 def chipset(value):
-    """The register as the file standing in for it holds it; no record kept yet, os-xgs-npu absent."""
+    """The register as the file standing in for it holds it; no record kept yet, no mark of a boot,
+    os-xgs-npu absent."""
     with open(MEM, 'wb') as handle:
         handle.write(value.to_bytes(4, 'little'))
-    for path in (KEPT, PROJECT, PROJECT_KEPT):
+    for path in (KEPT, BOOTS, PROJECT, PROJECT_KEPT):
         if os.path.exists(path):
             os.remove(path)
     del logged[:]
@@ -132,6 +136,7 @@ check('read by this plugin, bit 25: watchdog true', (record.get('watchdog'), rec
       (True, 'os-watchdog'))
 check('read by this plugin, bit 25: its line in the system log', len(said()), 1)
 check('read by this plugin, bit 25: the line names the reader', 'read by os-watchdog' in ''.join(said()), True)
+check('read by this plugin: no mark of the boot left, as on Intel', os.path.exists(BOOTS), False)
 
 # a bit 25 that may be one an earlier boot left: null, no line - not a reset to report
 for name, earlier in (('no record of the boot before (a first boot)', None),
@@ -402,10 +407,15 @@ check('boots: no tag, nothing to tell this boot by', (rr.boots(QUIET_BOOT[len(TA
                                                       rr.boots(QUIET_BOOT, '')), ((None, None, False),) * 2)
 
 
-def intel(kmsg, earlier=None, dmesg_boot=None, guest='none', tag=TAG):
-    """An Intel host: what dmesg prints (kmsg), the record kept before (earlier), dmesg.boot - as rc
-    wrote it early in this boot, before the start hooks: by default kmsg without this boot's lines from
-    ichwd - kern.vm_guest and kern.boot_tag. No record of this boot yet, no line logged."""
+BEFORE, TWO_BACK = BOOT - 86400, BOOT - 2 * 86400     # kern.boottime of the boot before, and of the one before it
+
+
+def intel(kmsg, earlier=None, dmesg_boot=None, guest='none', tag=TAG, mark=(BOOT, BEFORE)):
+    """An Intel host: what dmesg prints (kmsg), the record kept before (earlier: the boot before's,
+    unless it names another boot), dmesg.boot - as rc wrote it early in this boot, before the start
+    hooks: by default kmsg without this boot's lines from ichwd - kern.vm_guest, kern.boot_tag, and
+    the mark the start hook 07 left (mark: its boot and the boot before it names; by default this
+    boot's, naming the boot before; None: no mark). No record of this boot yet, no line logged."""
     rr.DMESG, rr.KMSG, rr.VM_GUEST, rr.BOOT_TAG = INTEL_DMESG, KMSG, guest, tag
     if dmesg_boot is None:
         head, _, this = kmsg.rpartition(TAG)
@@ -413,18 +423,30 @@ def intel(kmsg, earlier=None, dmesg_boot=None, guest='none', tag=TAG):
     for path, text in ((KMSG, kmsg), (INTEL_DMESG, dmesg_boot)):
         with open(path, 'w', encoding='utf-8') as handle:
             handle.write(text)
-    if os.path.exists(KEPT):
-        os.remove(KEPT)
+    for path in (KEPT, BOOTS):
+        if os.path.exists(path):
+            os.remove(path)
+    os.makedirs(os.path.dirname(KEPT), exist_ok=True)
     if earlier is not None:
-        os.makedirs(os.path.dirname(KEPT), exist_ok=True)
         with open(KEPT, 'w', encoding='utf-8') as handle:
-            json.dump(dict({'boot': BOOT - 86400, 'read_at': BOOT - 86380}, **earlier), handle)
+            json.dump(dict({'boot': BEFORE, 'read_at': BEFORE + 20}, **earlier), handle)
+    if mark is not None:
+        with open(BOOTS, 'w', encoding='utf-8') as handle:
+            json.dump({'boot': mark[0], 'before': mark[1]}, handle)
     del logged[:]
 
 
 def fields(*names):
     record = kept()
     return tuple(record.get(name) for name in names)
+
+
+def marked():
+    """The mark of a boot as `boot` left it, or None where there is none."""
+    if not os.path.exists(BOOTS):
+        return None
+    with open(BOOTS, encoding='utf-8') as handle:
+        return json.load(handle)
 
 
 # ichwd's line, where ichwd attached in the boot before - as in the test of 2026-10-29
@@ -438,19 +460,38 @@ check("ichwd's line: its line in the system log, naming ichwd", (len(said()), 'r
 # a line that may be an earlier reset's: the boot before had no ichwd to clear the timer's record
 intel(NO_ICHWD_BOOT + TIMEOUT_BOOT)
 rr.after_driver()
-check("ichwd's line, the boot before whole and without ichwd: watchdog null, no line in the log",
-      (fields('watchdog', 'said'), said()), ((None, 'timeout'), []))
-# the boot before's messages gone (a lone tag): its record says whether ichwd attached then
-for name, earlier, want in (
-        ("the record of the boot before says ichwd attached", {'read_by': 'ichwd', 'said': 'nothing'}, True),
-        ("the record of the boot before says ichwd did not attach", {'read_by': 'ichwd', 'said': None}, None),
-        ('no record of the boot before', None, None),
+check("ichwd's line, the boot before whole and without ichwd: watchdog null, no line in the log, its note says so",
+      (fields('watchdog', 'said', 'note'), said()),
+      ((None, 'timeout', 'ichwd did not attach in the boot before, so its line may be of an earlier reset'), []))
+
+# the boot before's messages gone (a lone tag): its record says whether ichwd attached then - the record
+# kept, where this boot's mark names its boot as the boot before; the last record kept may be older
+ATTACHED = {'read_by': 'ichwd', 'said': 'nothing'}
+UNTOLD = 'nothing kept tells whether ichwd attached in the boot before, so its line may be of an earlier reset'
+NOT_SAID = "the boot before's record does not say that ichwd attached, so its line may be of an earlier reset"
+for name, earlier, mark, want in (
+        ("the record of the boot before says ichwd attached", ATTACHED, (BOOT, BEFORE), (True, None)),
+        ("the record of the boot before says ichwd attached, kept 3 s from the boot its mark names",
+         dict(ATTACHED, boot=BEFORE + 3), (BOOT, BEFORE), (True, None)),
+        ("the record of the boot before says ichwd did not attach", {'read_by': 'ichwd', 'said': None}, (BOOT, BEFORE),
+         (None, NOT_SAID)),
+        ('no record of the boot before', None, (BOOT, BEFORE), (None, UNTOLD)),
         ("the record of the boot before is the chipset's, not ichwd's",
-         {'read_by': 'os-watchdog', 'value': '0x00080800'}, None)):
-    intel('[434] end of an older boot\n' + TIMEOUT_BOOT, earlier)
+         {'read_by': 'os-watchdog', 'value': '0x00080800'}, (BOOT, BEFORE), (None, NOT_SAID)),
+        # a boot that reached the start hook 07 and stopped before 10 kept no record: the last one kept is
+        # two boots old, and its ichwd cleared nothing of the boot between
+        ('the last record kept two boots old, its ichwd attached, the boot between kept none',
+         dict(ATTACHED, boot=TWO_BACK), (BOOT, BEFORE), (None, UNTOLD)),
+        ("the record kept 6 s from the boot the mark names: another boot's", dict(ATTACHED, boot=BEFORE - 6),
+         (BOOT, BEFORE), (None, UNTOLD)),
+        ('ichwd attached in the boot before, but this boot left no mark', ATTACHED, None, (None, UNTOLD)),
+        ("a mark left by the boot before, not this boot: its boot before is not this boot's",
+         dict(ATTACHED, boot=TWO_BACK), (BEFORE, TWO_BACK), (None, UNTOLD)),
+        ('a mark that names no boot before (the first that left one)', ATTACHED, (BOOT, None), (None, UNTOLD))):
+    intel('[434] end of an older boot\n' + TIMEOUT_BOOT, earlier, mark=mark)
     rr.after_driver()
-    check("ichwd's line, the boot before's messages gone, %s: watchdog %s" % (name, json.dumps(want)),
-          fields('watchdog'), (want,))
+    check("ichwd's line, the boot before's messages gone, %s: watchdog %s" % (name, json.dumps(want[0])),
+          fields('watchdog', 'note'), want)
 
 # attached without the line: false; and an earlier boot's line is not this boot's
 intel(RESET_BOOT + QUIET_BOOT)
@@ -496,6 +537,19 @@ for name, kmsg in (('ichwd not attached yet', RESET_BOOT + booted()),
     rr.at_boot()
     check('boot on Intel, %s: nothing kept, the record of the boot before as it was' % name, fields('boot', 'said'),
           (BOOT - 86400, 'nothing'))
+# what boot leaves on Intel is the mark that this boot reached the start hook 07, naming the boot before it
+# that did - the mark's own boot until then - apart from the record; once a boot
+intel(RESET_BOOT + booted(), dict(ATTACHED, watchdog=False), mark=(BEFORE, TWO_BACK))
+rr.at_boot()
+check('boot on Intel: the mark of this boot, naming the boot before by its mark; the record as it was',
+      (marked(), fields('boot', 'said')), ({'boot': BOOT, 'before': BEFORE}, (BEFORE, 'nothing')))
+rr.at_boot()
+check('boot again in the same boot (an installer, after the hook): the mark as it was', marked(),
+      {'boot': BOOT, 'before': BEFORE})
+intel(RESET_BOOT + booted(), mark=None)
+rr.at_boot()
+check('boot on Intel, no mark yet: this boot, no boot before named, no record', (marked(), os.path.exists(KEPT)),
+      ({'boot': BOOT, 'before': None}, False))
 intel(RESET_BOOT + booted(), {'read_by': 'ichwd', 'said': 'nothing', 'watchdog': False})
 with open(KMSG, 'a', encoding='utf-8') as handle:
     handle.write(ATTACH + '\n' + TIMEOUT + '\n')
@@ -507,16 +561,49 @@ with open(KMSG, 'w', encoding='utf-8') as handle:
 rr.after_driver()
 check('ichwd again in the same boot: the record kept first stays', kept(), first)
 
+
+# Boot after boot by the start hooks, kern.boottime as each boot has it: a boot that reached the start hook 07
+# and stopped before 10 kept no record, so where the boot after it has lost the messages of the boots before
+# (a board that clears its memory as it starts), the record kept two boots back is not taken for the boot
+# before's - null; where that boot reached 10, its record is the boot before's - true
+def hooks(boot, kmsg, to_10=True):
+    """One boot of an Intel host by its start hooks: 07 runs boot, and 10 ichwd unless the boot stopped
+    before it; kmsg, what dmesg prints by then."""
+    rr.boot_time = lambda: boot
+    with open(KMSG, 'w', encoding='utf-8') as handle:
+        handle.write(kmsg)
+    rr.at_boot()
+    if to_10:
+        rr.after_driver()
+
+
+LOST = '[434] end of an older boot\n'          # what the buffer kept of the boots before this one
+outcome = {}
+try:
+    for stopped in (True, False):
+        intel(QUIET_BOOT, mark=None)
+        hooks(TWO_BACK, QUIET_BOOT)
+        hooks(BEFORE, LOST + QUIET_BOOT, to_10=not stopped)
+        hooks(BOOT, LOST + TIMEOUT_BOOT)
+        outcome[stopped] = fields('boot', 'watchdog', 'note') + (marked(),)
+finally:
+    rr.boot_time = lambda: BOOT
+check('the start hooks, the boot before stopped between 07 and 10, the messages gone: null, nothing kept tells',
+      outcome[True], (BOOT, None, UNTOLD, {'boot': BOOT, 'before': BEFORE}))
+check('the start hooks, the boot before through 10, the messages gone: true, by its record',
+      outcome[False], (BOOT, True, None, {'boot': BOOT, 'before': BEFORE}))
+
 # nothing in a virtual machine, as on AMD; nothing for ichwd to say on AMD
-intel(RESET_BOOT + TIMEOUT_BOOT, guest='kvm')
+intel(RESET_BOOT + TIMEOUT_BOOT, guest='kvm', mark=None)
 rr.at_boot()
 rr.after_driver()
-check('a virtual machine: neither boot nor ichwd keeps a record', os.path.exists(KEPT), False)
+check('a virtual machine: neither boot nor ichwd keeps a record, nor a mark', (os.path.exists(KEPT), marked()),
+      (False, None))
 intel(RESET_BOOT + TIMEOUT_BOOT, {'read_by': 'os-watchdog', 'value': '0x00080800'},
-      dmesg_boot='CPU: AMD Ryzen Embedded\n  Origin="AuthenticAMD"  Id=0x810f81  Family=0x17  Model=0x18\n')
+      dmesg_boot='CPU: AMD Ryzen Embedded\n  Origin="AuthenticAMD"  Id=0x810f81  Family=0x17  Model=0x18\n', mark=None)
 rr.after_driver()
-check("an AMD host: ichwd leaves the chipset's record alone", fields('read_by', 'value', 'boot'),
-      ('os-watchdog', '0x00080800', BOOT - 86400))
+check("an AMD host: ichwd leaves the chipset's record alone, and leaves no mark", fields('read_by', 'value', 'boot')
+      + (marked(),), ('os-watchdog', '0x00080800', BOOT - 86400, None))
 
 # the page shows ichwd's record where it is read: on Intel, not in a virtual machine
 for name, dmesg_boot, guest, want in (

@@ -6,7 +6,8 @@
 """
 Why the host last reset, as its own chipset recorded it.
 
-    reset_reason.py boot     at boot: read the record, log it, keep it, and clear it for the next boot
+    reset_reason.py boot     at boot: read the record, log it, keep it, and clear it for the next boot;
+                             on an Intel host only mark that this boot reached the start hook 07
     reset_reason.py ichwd    once the timer's driver is loaded: on an Intel host, what ichwd said of it
     reset_reason.py show     what was kept at this boot, as JSON
 
@@ -74,6 +75,18 @@ may be an earlier reset's: ichwd clears the bit when it attaches, so the line is
 where ichwd attached in the boot before - as that boot's messages say, or, where they are gone, its
 record - and otherwise the bit may have waited through boots that had no ichwd.
 
+THE BOOT BEFORE'S RECORD, KNOWN BY A MARK. The record kept is the last one kept, not always the boot
+before's: a boot that stopped before the start hook 10, in a hang or a panic, kept none, and the
+record is then of a boot further back, whose ichwd says nothing of the boot between. So `boot`, which
+the start hook 07 runs at every boot, leaves on Intel a mark of its own beside the record
+(/var/db/os-watchdog/boots.json; the record stays one a boot): this boot and the boot before it that
+reached the hook, by kern.boottime. `ichwd` takes the record as the boot before's only where its boot
+is the one this boot's mark names, within five seconds; otherwise it can tell nothing from it - null.
+A boot that stopped before the start hook 07 left no mark, and cannot be seen: where its messages are
+gone too, the boot before it is taken for the boot before this one. Where the board clears its memory
+as it starts, the messages of the boot before are gone after every reset, and the mark is what tells
+(2026-11-17).
+
 THIS BOOT'S MESSAGES ONLY, ONCE ITS DRIVER IS LOADED. The kernel keeps its message buffer through a
 reset, so dmesg(8) prints the boots before this one too, each after the boot tag the kernel prints
 first (kern.boot_tag, "---<<BOOT>>---"): only what follows the last tag is this boot's, and what lies
@@ -118,6 +131,10 @@ KMSG = os.environ.get('XGS_RESET_KMSG')
 BOOT_TAG = os.environ.get('XGS_RESET_BOOT_TAG')
 # what the kernel prints at the start of every boot, where the loader set no other (sys/kern/subr_prf.c)
 DEFAULT_BOOT_TAG = '---<<BOOT>>---'
+# On Intel: the mark `boot` leaves at every boot - this boot and the boot before it that reached the
+# start hook 07, by kern.boottime - by which `ichwd` knows the boot before's record. Apart from the
+# record, which stays one a boot.
+BOOTS = os.environ.get('XGS_RESET_BOOTS', '/var/db/os-watchdog/boots.json')
 # ichwd's line where it finds the TCO timer's record of a second timeout - printed only after every way
 # its attach can fail (sys/dev/ichwd/ichwd.c, ichwd_attach()); the line newbus prints as an attach of
 # it begins, "ichwd0: <its description>", the place on the bus after; and the one where one failed.
@@ -268,16 +285,18 @@ def log(message):
         pass
 
 
-def keep(record):
+def keep(record, path=None):
+    """The record, or on Intel the mark of this boot (path BOOTS), on disk whole or not at all."""
+    path = KEPT if path is None else path
     try:
-        os.makedirs(os.path.dirname(KEPT), exist_ok=True)
-        with open(KEPT + '.new', 'w', encoding='utf-8') as handle:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path + '.new', 'w', encoding='utf-8') as handle:
             json.dump(record, handle, indent=1)
             # on disk before it replaces the old: a reset soon after this boot hook must not leave an
             # empty record
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(KEPT + '.new', KEPT)
+        os.replace(path + '.new', path)
     except OSError:
         pass
 
@@ -293,6 +312,38 @@ def kept_now(path=KEPT):
 
 def this_boot(record, boot):
     return bool(boot) and abs(int(record.get('boot') or 0) - boot) <= 5
+
+
+def number(value):
+    """A time kept in a record or a mark, as a whole number; 0 where it is none."""
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def of_boot(record, boot):
+    """this_boot() for what a file may hold, on Intel: never true for a boot of 0, nor raises."""
+    return bool(boot) and abs(number(record.get('boot')) - number(boot)) <= 5
+
+
+def mark_boot(boot):
+    """On Intel, from the start hook 07 at every boot: the mark that this boot reached it, with the boot
+    before it that did - the mark's own boot until now - kept apart from the record. Once a boot: a
+    second run in it (an installer's, after the hook) leaves the mark as it is."""
+    if not boot:
+        return
+    mark = kept_now(BOOTS)
+    if of_boot(mark, boot):
+        return
+    keep({'boot': boot, 'before': number(mark.get('boot')) or None}, BOOTS)
+
+
+def boot_before(boot):
+    """The boot before this one that reached the start hook 07, by its kern.boottime, as this boot's mark
+    names it; 0 where this boot left no mark (another's is not this boot's), or its mark names none."""
+    mark = kept_now(BOOTS)
+    return number(mark.get('before')) if of_boot(mark, boot) else 0
 
 
 def project_mark():
@@ -377,13 +428,15 @@ def ichwd_said(text):
     return None, None
 
 
-def cleared_before(before, whole, earlier):
+def cleared_before(before, whole, earlier, before_boot):
     """Whether ichwd attached in the boot before this one, and so cleared the TCO timer's record then:
     from that boot's messages where they are here - an attach in them, or none in them whole - and
-    from the record kept of it where they are not."""
+    where they are not, from the record kept (earlier), but only where it is that boot's: its boot is
+    the one this boot's mark names as the boot before (before_boot, 0 for none). The last record kept
+    may be of a boot further back, with a boot between that kept none: false then, so null."""
     if ichwd_said(before)[0] is not None:
         return True
-    if whole:
+    if whole or not of_boot(earlier, before_boot):
         return False
     return earlier.get('read_by') == 'ichwd' and earlier.get('said') is not None
 
@@ -415,13 +468,20 @@ def from_ichwd(boot):
     said, line = ichwd_said(this)
     record = {'boot': boot, 'read_at': int(time.time()), 'value': None, 'bits': [], 'read_by': 'ichwd',
               'said': said, 'line': line}
-    if said == 'timeout' and cleared_before(before, whole, earlier):
+    before_boot = boot_before(boot)
+    if said == 'timeout' and cleared_before(before, whole, earlier, before_boot):
         record['watchdog'] = True
         message = 'last reset: the hardware watchdog, as ichwd said at this boot - ' + line
     elif said == 'timeout':
         record['watchdog'] = None
-        record['note'] = 'ichwd did not attach in the boot before, so its line may be of an earlier reset'
-        message = '%s - but ichwd did not attach in the boot before, so it may be of an earlier reset' % line
+        if whole:
+            why = 'ichwd did not attach in the boot before'
+        elif of_boot(earlier, before_boot):
+            why = "the boot before's record does not say that ichwd attached"
+        else:
+            why = 'nothing kept tells whether ichwd attached in the boot before'
+        record['note'] = why + ', so its line may be of an earlier reset'
+        message = '%s - but %s, so it may be of an earlier reset' % (line, why)
     elif said == 'nothing':
         record['watchdog'] = False
         message = 'last reset: not the hardware watchdog, as far as ichwd can tell - %s, no timeout' % line
@@ -452,7 +512,10 @@ def at_boot():
     why = no_register()
     if why:
         if no_ichwd() is None:
-            # an Intel host: what ichwd says as it attaches, which is later in the boot (2026-11-17)
+            # an Intel host: what ichwd says as it attaches, which is later in the boot (2026-11-17);
+            # here only the mark that this boot reached this hook, by which `ichwd` knows the boot
+            # before's record
+            mark_boot(boot_time())
             print("an Intel processor: the cause is what ichwd says as it attaches, kept by "
                   "reset_reason.py ichwd once the timer's driver is loaded")
             return 0
