@@ -10,6 +10,20 @@ only shows it.
 Plugin Changelog
 ================
 
+1.0.4
+
+* each restart record says whether the hardware watchdog caused it - its
+  "watchdog" field true, false, or null where that cannot be told - and
+  a line goes to the system log when it did; os-netreport 1.0.7's
+  watchdog alert reads that field
+* on an Intel host, the last restart's reason from the line ichwd(4)
+  prints as it attaches, shown on the page; nothing changes on AMD or in
+  a virtual machine
+* where os-xgs-npu is installed, a read-only line for its setting When
+  the fast path stops, with a link to XGS: Settings
+* on by default by every way of installing: confirmed, and held by the
+  tests
+
 1.0.3
 
 * an update installed only as its owner signed it: the release's
