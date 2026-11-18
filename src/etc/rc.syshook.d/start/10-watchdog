@@ -5,7 +5,13 @@
 #
 # The host's hardware watchdog, armed at the end of every boot when the setting says so -
 # scripts/watchdog/watchdog.sh. Never fails the boot.
+#
+# Then, on an Intel host, what ichwd said of the last reset when watchdog.sh loaded it, kept for the
+# page - scripts/watchdog/reset_reason.py ichwd. The start hook 07 runs before the driver is loaded,
+# so it could not (2026-11-17).
 SCRIPT=/usr/local/opnsense/scripts/watchdog/watchdog.sh
 [ -f "${SCRIPT}" ] || exit 0
 /bin/sh "${SCRIPT}" start > /dev/null 2>&1
+R=/usr/local/opnsense/scripts/watchdog/reset_reason.py
+[ -x "${R}" ] && "${R}" ichwd > /dev/null 2>&1
 exit 0

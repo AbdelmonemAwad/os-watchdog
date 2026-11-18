@@ -52,10 +52,33 @@ Arms the hardware watchdog of the host, so a host that stops running is reset by
   FCH's `S5_RESET_STATUS` register, one bit for each cause - keeps it, and clears it for the next boot;
   on the machine itself only: not in a virtual machine, where the processor can be a Ryzen or an EPYC
   with no chipset behind the register's address, and never a value with every bit set, which is what
-  a read returns where nothing answers - neither is kept or written back (since 2026-10-29);
+  a read returns where nothing answers - neither is kept or written back (since 2026-10-29); every
+  record kept says in one field, `"watchdog"`, whether the hardware watchdog caused the reset - true
+  with bit 25, false with a value read without it, null when nothing was read - and a reset it
+  caused is written in the system log as such (since 2026-11-17; os-netreport's alert reads the
+  field);
+- on Intel processors, keeps at every boot whether the hardware watchdog caused the last reset, as
+  FreeBSD's `ichwd` says when it attaches - `resuming after hardware watchdog timeout`, where the TCO
+  timer's record of it is set - read from this boot's kernel messages only, after the boot tag, as the
+  message buffer keeps the boots before, once the start hook has loaded the driver: `"watchdog"` true
+  with that line, false where ichwd attached without it, null where it did not attach, or where the
+  boot before had no ichwd to clear the record, so the line may be an earlier reset's. Whether it had
+  is read from that boot's messages, or where they are gone from the record kept - taken as the boot
+  before's only where the mark the start hook 07 leaves at every boot (`/var/db/os-watchdog/boots.json`)
+  names it, not where a boot between kept none; a boot that stopped before the start hook 07 leaves no
+  mark, and cannot be seen. Only where ichwd attaches: a chipset in its tables, with its driver loaded -
+  by this plugin as it arms the timer, so the setting on and the timer not held by os-xgs-npu or
+  another watchdogd, or by the loader. Elsewhere on Intel - a chipset ichwd does not know, or nothing
+  that loads it, as with the setting off or os-xgs-npu's watchdog script installed - nothing is read,
+  and the page's last restart is not available unless a record kept says what ichwd said. Nothing is
+  read from the hardware for it, and nothing in a virtual machine (since 2026-11-17);
 - **System: Hardware Watchdog** (XGS: Hardware Watchdog when os-xgs-npu is installed): whether the
-  timer is armed and by whom, the timer, the last restart with each bit it set, and two settings -
-  on or off, and the timeout (64, 128 or 256 seconds).
+  timer is armed and by whom, the timer, the last restart with each bit it set - on Intel, what ichwd
+  said, its line as the value read - and two settings - on or off, and the timeout (64, 128 or 256
+  seconds). The last restart is called the hardware watchdog only where the record's `watchdog` field
+  is true; a watchdog bit or timeout the record cannot tie to this restart (the field null) is shown
+  as "maybe an earlier watchdog reset", and ichwd attached without a timeout as "no watchdog timeout
+  seen" - firmware may clear that status, so it is not proof of another cause.
 
 ~~a page in the XGS section of OPNsense's menu~~ - it is under **System**, beside Fan Control (under
 **XGS** when os-xgs-npu is installed): the subject is the machine itself, and the plugin is not for
@@ -78,6 +101,15 @@ aside while they are installed:
   the boot instead of reading the register.
 
 When os-xgs-npu stops doing either is its owner's decision; nothing here changes it.
+
+The page also shows, read only, os-xgs-npu's setting **When the fast path stops** in XGS: Settings
+(`xgs.general.fastpath_restart`) - what os-xgs-npu does when the coprocessor's fast path stops
+answering its heartbeat: take the coprocessor up again, or restart the appliance, by default; restart
+it after 2, 5 or 10 minutes; or say so and nothing more - in the words of its choices, as os-xgs-npu's
+own fastpath.py shows it, and that the setting has nothing to watch on a host with no heartbeat; with
+a link to XGS: Settings, where it is changed. It is not the coprocessor's own hardware watchdog, which
+os-xgs-npu keeps fed whatever this says. Nothing of it where os-xgs-npu is not installed (since
+2026-11-17).
 
 ## What is tested
 
@@ -178,6 +210,12 @@ version 21), 2026-11-06, OPNsense 26.7 with os-xgs-npu installed: the release br
 Not run for 1.0.2: a hang in the kernel itself during a stop hook (the paused watchdogd stands in for
 one); a halt or power-off (`shutdown -h`, `-p`), which was run for 1.0.0 only; a host with neither
 os-xgs-npu nor an XGS board.
+
+The reset reason on Intel (2026-11-17) is held by `tools/test-watchdog.py`, which the checks run,
+against kernel messages as OPNsense 26.7 printed them in qemu on 2026-10-29 - ichwd's attach, its
+`resuming after hardware watchdog timeout` after the timer had run out, and the boots before them that
+the message buffer keeps. Not run yet on an Intel machine; in qemu nothing is read, as in any virtual
+machine.
 
 ## Installation
 

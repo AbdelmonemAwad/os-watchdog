@@ -75,6 +75,11 @@ printf '{"commit": "%s", "date": "%s", "source": "%s", "installed_at": %s}\n' \
 [ -e /var/db/os-watchdog/reset-reason.json ] ||
     /usr/local/opnsense/scripts/watchdog/reset_reason.py boot || true
 /bin/sh /usr/local/opnsense/scripts/watchdog/watchdog.sh start || true
+# On an Intel host the cause is what ichwd says as it attaches, which watchdog.sh has just made it do
+# where nothing had loaded it: kept here where none is kept yet, as the start hook 10 keeps it at
+# every boot (2026-11-17).
+[ -e /var/db/os-watchdog/reset-reason.json ] ||
+    /usr/local/opnsense/scripts/watchdog/reset_reason.py ichwd || true
 
 if [ "${WHERE}" = xgs ]; then
     echo "Hardware Watchdog installed: XGS > Hardware Watchdog"

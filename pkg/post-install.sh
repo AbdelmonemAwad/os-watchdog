@@ -44,6 +44,9 @@ fi
 [ -e /var/db/os-watchdog/reset-reason.json ] ||
     /usr/local/opnsense/scripts/watchdog/reset_reason.py boot > /dev/null 2>&1 || true
 /bin/sh /usr/local/opnsense/scripts/watchdog/watchdog.sh start || true
+# On an Intel host, what ichwd said as watchdog.sh loaded it - install/install.sh says why.
+[ -e /var/db/os-watchdog/reset-reason.json ] ||
+    /usr/local/opnsense/scripts/watchdog/reset_reason.py ichwd > /dev/null 2>&1 || true
 
 # The page's place in the menu: the XGS section where os-xgs-npu is installed, System where it is
 # not. The menu file is not one of the package's files; place-menu.sh writes it and says which it

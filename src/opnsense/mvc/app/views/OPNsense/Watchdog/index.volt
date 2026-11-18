@@ -3,7 +3,8 @@
  # Copyright (c) 2026 Abdelmonem Awad <eg2@live.com>
  #
  # System: Hardware Watchdog (XGS: Hardware Watchdog when os-xgs-npu is installed) - the timer, who
- # holds it, the last reset, and the two settings.
+ # holds it, the last reset, and the two settings - and, where os-xgs-npu is installed, its
+ # coprocessor watchdog, read only.
  #}
 
 <style>
@@ -65,6 +66,17 @@
            their leading "the" here on 2026-10-29, as the page's values do; os-xgs-npu's page has it
            still. */
         function restart(r) {
+            /* On Intel the record is what ichwd said as it attached (reset_reason.py, 2026-11-17). The
+               record's "watchdog" field rules: the hardware watchdog only where it is true; a timeout ichwd
+               reported with the field null may be one an earlier boot left; ichwd attached without one is
+               no timeout seen - not proof of another cause (firmware may clear the status) - and nothing is
+               known where it did not attach. */
+            if (r && r.read_by === 'ichwd') {
+                if (r.watchdog === true) { return {cls: 'warn', what: "{{ lang._('hardware watchdog') }}"}; }
+                if (r.said === 'timeout') { return {cls: '', what: "{{ lang._('maybe an earlier watchdog reset') }}"}; }
+                if (r.said === 'nothing') { return {cls: '', what: "{{ lang._('no watchdog timeout seen') }}"}; }
+                return {cls: '', what: "{{ lang._('not recorded') }}"};
+            }
             if (!r || !r.value) {
                 return {cls: '', what: "{{ lang._('not recorded') }}"};
             }
@@ -73,7 +85,12 @@
             if (has([27, 31, 30])) { return {cls: 'bad', what: "{{ lang._('an uncorrected hardware error') }}"}; }
             if (has([23])) { return {cls: 'bad', what: "{{ lang._('processor shutdown') }}"}; }
             if (has([0, 9])) { return {cls: 'bad', what: "{{ lang._('overheating') }}"}; }
-            if (has([25])) { return {cls: 'warn', what: "{{ lang._('hardware watchdog') }}"}; }
+            /* bit 25 with the record's "watchdog" field null: the bit may be one an earlier boot left
+               (reset_reason.py); a record kept before the field has none, and bit 25 rules there */
+            if (has([25])) {
+                return r.watchdog === null ? {cls: '', what: "{{ lang._('maybe an earlier watchdog reset') }}"}
+                                           : {cls: 'warn', what: "{{ lang._('hardware watchdog') }}"};
+            }
             if (has([24, 29])) { return {cls: 'warn', what: "{{ lang._('a failed boot') }}"}; }
             if (has([16, 22, 26])) { return {cls: 'warn', what: "{{ lang._('reset pin') }}"}; }
             if (has([1, 2, 4])) { return {cls: 'warn', what: "{{ lang._('power button') }}"}; }
@@ -132,9 +149,10 @@
             $cards.append(card(data.timer.desc ? 'ok' : '', 'fa-microchip', "{{ lang._('Timer') }}",
                 data.timer.desc ? data.timer.driver : "{{ lang._('not found') }}",
                 data.timer.desc || "{{ lang._('Apply loads its driver') }}"));
-            /* Where the chipset keeps no record - not an AMD processor of family 17h or later, or a
-               virtual machine - the restart is "not available" rather than "not recorded", and a
-               record kept there by an older version is not shown (2026-10-29). */
+            /* Where no record is read - neither an AMD processor of family 17h or later nor an Intel
+               one where ichwd speaks (status.py's reset_supported), or a virtual machine - the restart
+               is "not available" rather than "not recorded", and a record kept there by an older
+               version is not shown (2026-10-29; Intel since 2026-11-17). */
             const supported = data.reset_supported !== false;
             const reset = supported ? data.reset : null;
             const r = supported ? restart(reset) : {cls: '', what: "{{ lang._('not available') }}"};
@@ -155,20 +173,45 @@
             $('#wd-project').toggle(project && data.project_enabled !== false);
             $('#wd-project-off').toggle(project && data.project_enabled === false);
 
+            /* os-xgs-npu's setting When the fast path stops, xgs.general.fastpath_restart - read only,
+               by its own name and in the words of its choices; set in XGS: Settings. Nothing without
+               os-xgs-npu (null). */
+            const fastpath = {
+                0: "{{ lang._('Say so, and nothing more') }}",
+                1: "{{ lang._('Take it up again, or restart') }}",
+                2: "{{ lang._('Restart the appliance after 2 minutes') }}",
+                5: "{{ lang._('Restart the appliance after 5 minutes') }}",
+                10: "{{ lang._('Restart the appliance after 10 minutes') }}"
+            };
+            const fp = data.fastpath_restart;
+            const has_fp = fp !== null && fp !== undefined && fastpath[fp] !== undefined;
+            $('#wd-fastpath').toggle(has_fp);
+            if (has_fp) {
+                $('#wd-fastpath-choice').text(plain(fastpath[fp]));
+                $('#wd-fastpath-none').toggle(data.fastpath_heartbeat === false);
+            }
+
             const $rows = $('#wd-bits tbody').empty();
             const bits = reset && reset.bits ? reset.bits : [];
             bits.forEach(function (b) {
                 $rows.append($('<tr/>').append($('<td/>').text(b.bit)).append($('<td/>').text(
                     reasons[b.bit] || "{{ lang._('no published meaning') }}")));
             });
-            if (!bits.length) {
+            /* ichwd's word, on Intel: one cause, with no bit to number; its line as the value read */
+            const ichwd = !!reset && reset.read_by === 'ichwd';
+            if (ichwd && reset.said === 'timeout') {
+                $rows.append($('<tr/>').append($('<td/>').text('-')).append($('<td/>').text(reasons[25])));
+            } else if (!bits.length) {
                 $rows.append($('<tr/>').append($('<td colspan="2" class="text-muted"/>').text(
                     !supported ? "{{ lang._('Not available on this host.') }}" :
+                    ichwd && !reset.said ? "{{ lang._('Nothing was read from ichwd at this boot.') }}" :
                     reset && reset.read_by === 'os-xgs-npu' && !reset.value ?
                         "{{ lang._('os-xgs-npu reads the record on this host and kept none for this boot.') }}" :
                         "{{ lang._('No cause recorded at this boot.') }}")));
             }
-            $('#wd-raw').text(reset && reset.value ? reset.value : '-');
+            /* through plain(): ichwd's line has its description in <>, which OPNsense's API hands over
+               escaped, as &lt; and &gt;, to the page's own session */
+            $('#wd-raw').text(plain(reset && reset.value ? reset.value : ichwd && reset.line ? reset.line : '-'));
             $('#wd-reader').text(reset && reset.read_by ? reset.read_by : '-');
         }
 
@@ -219,6 +262,17 @@
     <span id="wd-project-off" class="text-muted" style="display: none;">
         {{ lang._('os-xgs-npu has its watchdog switched off in XGS: Settings. While its watchdog script is installed this plugin does not arm the timer either, so nothing arms it; the settings below take over once that script is removed.') }}
     </span>
+    <div id="wd-fastpath" style="display: none; margin-top: 6px;">
+        <i class="fa fa-fw fa-microchip text-muted"></i>
+        <strong>{{ lang._('When the fast path stops') }}</strong>: <span id="wd-fastpath-choice"></span>
+        &middot; <a href="/ui/xgs/settings">{{ lang._('XGS: Settings') }}</a>
+        <span id="wd-fastpath-none" class="text-muted" style="display: none;">
+            &middot; {{ lang._('This host has no fast-path heartbeat: the setting has nothing to watch here.') }}
+        </span>
+        <div class="text-muted">
+            {{ lang._('os-xgs-npu watches the fast path of the coprocessor and, when it stops answering, does what its setting says. It is set in XGS: Settings; this page only shows it.') }}
+        </div>
+    </div>
 </div>
 
 <ul class="nav nav-tabs" data-tabs="tabs" id="maintabs">
@@ -232,7 +286,7 @@
     </div>
     <div id="reset" class="tab-pane">
         <div class="text-muted" style="padding: 10px 15px 0;">
-            {{ lang._('Why the host last reset, as its chipset recorded it: one bit for each cause, read early in every boot and cleared for the next. Only on AMD processors of family 17h or later, and not in a virtual machine.') }}
+            {{ lang._('Why the host last reset, as its chipset recorded it. On AMD processors of family 17h or later: one bit for each cause, read early in every boot and cleared for the next. On Intel: only whether the hardware watchdog caused it, as ichwd says when it attaches - where ichwd knows the chipset and this plugin arms the timer, so the setting is on and neither os-xgs-npu nor another watchdogd holds the timer. Not in a virtual machine.') }}
         </div>
         <table id="wd-bits" class="table table-condensed table-striped">
             <thead>
