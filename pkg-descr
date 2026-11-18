@@ -10,6 +10,11 @@ only shows it.
 Plugin Changelog
 ================
 
+1.0.4
+
+* Phase 1: a reset the hardware watchdog caused, in one field; the
+  coprocessor watchdog's line
+
 1.0.3
 
 * an update installed only as its owner signed it: the release's
